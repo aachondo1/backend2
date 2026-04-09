@@ -150,25 +150,33 @@ def _compute_delta(
     scores_summary: dict,
     previous_session: dict | None,
     global_score: float,
-) -> tuple[str, str]:
+) -> tuple[str, str, dict]:
     """
     Calcula delta por golpe vs sesión anterior.
-    Retorna (evolution_context_text, delta_headline).
+    Retorna (evolution_context_text, delta_headline, comparison_delta).
+
+    comparison_delta: dict persistible con deltas numéricos por golpe + global.
+      {
+        "global":    {"prev": 63.0, "current": 56.0, "delta": -7.0},
+        "forehand":  {"prev": 70.0, "current": 60.0, "delta": -10.0},
+        ...
+      }
 
     delta_headline: frase condicional para el prompt.
       - Si algún golpe retrocede > 5 pts → alerta específica
       - Si todo mejora → positivo
-      - Sin historial → strings vacíos
+      - Sin historial → strings vacíos, comparison_delta vacío
     """
     if not previous_session:
-        return "", ""
+        return "", "", {}
 
     prev_scores = previous_session.get("scores_detalle", previous_session.get("scores", {}))
     prev_global = previous_session.get("global_score", global_score)
 
-    delta_lines  = []
-    alerts       = []
-    improvements = []
+    delta_lines      = []
+    alerts           = []
+    improvements     = []
+    comparison_delta = {}
 
     for stroke, data in scores_summary.items():
         current = data.get("total", 0)
@@ -182,6 +190,7 @@ def _compute_delta(
             delta = round(current - prev, 1)
             sign  = "+" if delta >= 0 else ""
             delta_lines.append(f"  • {stroke}: {prev} → {current} ({sign}{delta})")
+            comparison_delta[stroke] = {"prev": prev, "current": current, "delta": delta}
             if delta <= -5:
                 alerts.append(f"retroceso crítico en {stroke} ({sign}{delta} pts)")
             elif delta >= 5:
@@ -189,6 +198,11 @@ def _compute_delta(
 
     global_delta = round(global_score - float(prev_global), 1)
     global_sign  = "+" if global_delta >= 0 else ""
+    comparison_delta["global"] = {
+        "prev":    float(prev_global),
+        "current": global_score,
+        "delta":   global_delta,
+    }
 
     evolution_context = (
         f"SESIÓN ANTERIOR — score global: {prev_global} | "
@@ -212,7 +226,7 @@ def _compute_delta(
     else:
         delta_headline = "Sin cambios significativos respecto a la sesión anterior."
 
-    return evolution_context, delta_headline
+    return evolution_context, delta_headline, comparison_delta
 
 
 def _angle_reliability_note(camera_orientation: str | None) -> str:
@@ -294,7 +308,7 @@ def run_agent_synthesizer(
     fatigue_text                          = _build_fatigue_text(coordinator_data)
     angle_note                            = _angle_reliability_note(camera_orientation)
     tactical_ctx                          = coordinator_data.get("tactical_context", {})
-    evolution_context, delta_headline     = _compute_delta(scores_summary, previous_session, global_score)
+    evolution_context, delta_headline, comparison_delta = _compute_delta(scores_summary, previous_session, global_score)
 
     fh_score    = scores_summary.get("forehand", {}).get("total", 0)
     bh_score    = scores_summary.get("backhand", {}).get("total", 0)
@@ -517,5 +531,10 @@ Formato: texto continuo sin headers, cada sección separada por doble salto de l
         "minuto_inicio": None,
         "observacion":   "",
     })
+
+    # Campos de comparativa — calculados en Python, no por LLM
+    # Se sobreescriben siempre para garantizar consistencia con _compute_delta
+    structured["delta_headline"]   = delta_headline
+    structured["comparison_delta"] = comparison_delta
 
     return structured
