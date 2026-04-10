@@ -439,7 +439,8 @@ def agent_coach(
             risk_flags.append(riesgo)
     risk_ctx = f"RIESGO DE LESIÓN DETECTADO: {'; '.join(risk_flags)}" if risk_flags else ""
 
-    prompt = f"""Eres un coach de tenis experto. Crea un plan de entrenamiento personalizado basado en el análisis biomecánico.
+    prompt = f"""Eres un coach de tenis experto especializado en prescripción de entrenamientos biomecánicamente fundamentados.
+Tu tarea: crear un plan de entrenamiento práctico, testeable y progresivo basado en el análisis biomecánico.
 Responde SOLO con JSON válido, sin markdown.
 
 {session_ctx}
@@ -451,20 +452,88 @@ NIVEL: {nivel} | SCORE GLOBAL: {global_score}/100
 PRIORIDADES DE MEJORA: {json.dumps(prioridades, ensure_ascii=False)}
 {risk_ctx}
 
-Reglas para el JSON:
-- "weekly_focus": UNA frase de máx 6 palabras que resuma el foco de la semana (ej: "Bajar centro de gravedad")
-- "drill_cards": 3-4 fichas de entrenamiento concretas basadas en la CAUSA RAÍZ. Cada una:
-    "title": nombre corto del ejercicio
-    "type": uno de "Canasta" | "Pared" | "Peloteo" | "Sin pelota" | "En juego real"
-    "reps": series y reps como string (ej: "3 series × 20 reps")
-    "instruction": qué hacer exactamente, 1-2 oraciones precisas
-    "why": por qué este drill ataca la causa raíz detectada
-- "mental_cues": lista de 2-3 palabras clave cortas para repetir en cancha mientras se juega (ej: ["Abajo", "Esperar", "Girar"])
-- "injury_prevention": si hay riesgo_lesion, incluir 1-2 ejercicios preventivos de movilidad o fortalecimiento; sino lista vacía []
-- "ejercicios_prioritarios": mantener formato anterior para compatibilidad con el frontend actual
-- "plan_semanal", "mensaje_motivacional", "proxima_sesion_foco", "notas_coach": igual que antes
+═══════════════════════════════════════════════════════════════════
 
-JSON exacto:
+LÓGICA DE PRESCRIPCIÓN:
+
+1. CONEXIÓN RAÍZ → DRILL
+   Para cada prioridad de mejora, diseña drills que:
+   - Atacan el PATRÓN ESPECÍFICO (ej: si la causa es "cadera lenta en rotación", drills sin pelota enfocados en rotación pélvica)
+   - Son PROGRESIVOS: empiezan sin pelota → con pared → peloteo → juego real
+   - Incluyen INDICADORES MEDIBLES: reps, series, métricas de ejecución
+
+2. DRILL DESIGN
+   Cada drill debe:
+   - Tener 1 objetivo biomecánico claro (no multitarea)
+   - Ser ejecutable en 15-30 minutos máximo
+   - Incluir 3-4 series de trabajo + descanso
+   - Progresión visible en 2-3 semanas de práctica consistente
+
+3. MENTAL CUES
+   Palabras clave que el jugador REPITE en cancha mientras juega:
+   - Deben ser accionables en tiempo real
+   - Cortas (1-2 palabras máximo cada una)
+   - Directamente vinculadas a la causa raíz
+
+4. INJURY PREVENTION
+   Si hay riesgo detectado:
+   - Incluir 1-2 ejercicios de fortalecimiento/movilidad específicos
+   - Estos se hacen FUERA DE CANCHA, no durante drills
+   - Incluir: series × reps, duración total
+
+5. PLAN SEMANAL
+   - LUNES-VIERNES: énfasis en drills específicos + días de trabajo técnico
+   - SÁBADO: juego real con atención a las cues mentales
+   - DOMINGO: recuperación o drills de mantenimiento
+
+═══════════════════════════════════════════════════════════════════
+
+REGLAS PARA EL JSON:
+
+- "weekly_focus": UNA frase de máx 6 palabras que resuma el enfoque principal de la semana
+  EJEMPLO: "Acelerar rotación de cadera en golpes"
+
+- "drill_cards": 3-4 fichas de entrenamiento concretas basadas en la CAUSA RAÍZ
+  ESTRUCTURA de cada drill:
+    "title": nombre descriptivo del ejercicio (máx 6 palabras)
+      EJEMPLO: "Rotación pélvica sin pelota"
+    "type": uno de "Canasta" | "Pared" | "Peloteo" | "Sin pelota" | "En juego real"
+    "reps": series y repeticiones como string
+      EJEMPLO: "4 series × 15 reps, descanso 45s entre series"
+    "instruction": instrucciones precisas paso a paso (2-3 oraciones máximo)
+      EJEMPLO: "De pie, brazos cruzados. Rota cadera izquierda adelante, mantén 2s. Alterna lados. Énfasis en amplitud de rotación, no velocidad."
+    "why": conexión explícita entre este drill y la causa raíz detectada
+      EJEMPLO: "Ataca directamente la rotación pélvica lenta. Crea patrón motor de rotación amplia que se transfiere a golpes reales."
+
+- "mental_cues": lista de 2-3 palabras clave CORTAS para repetir en cancha
+  EJEMPLOS: ["Cadera primero", "Esperar rotación", "Acelerar"]
+  CRITERIO: cada cue debe ser ejecutable en < 1 segundo
+
+- "injury_prevention": si hay riesgo_lesion, incluir 1-2 ejercicios (lista de dicts)
+  ESTRUCTURA si aplica:
+    [{{"nombre": "nombre corto", "series_reps": "3×8", "duracion": "10 minutos", "descripcion": "instrucciones simples"}}]
+  Si NO hay riesgo: lista vacía []
+
+- "ejercicios_prioritarios": mantener formato anterior para compatibilidad frontend
+  ESTRUCTURA: [{{"nombre":"", "objetivo":"", "duracion_minutos":0, "repeticiones":"", "descripcion":"", "indicador_progreso":""}}]
+
+- "plan_semanal": distribución semanal de trabajo
+  ESTRUCTURA:
+  {{"lunes":"", "martes":"", "miercoles":"", "jueves":"", "viernes":"", "sabado":"", "domingo":""}}
+  EJEMPLO lunes: "Drills sin pelota (rotación pélvica) 20 min + peloteo focus (rallies 5-10 golpes) 20 min"
+
+- "mensaje_motivacional": 1-2 oraciones que conecten el plan con el progreso esperado
+  TONO: realista, específico, orientado a la meta
+
+- "proxima_sesion_foco": qué revisar en la próxima sesión (conectado con causa raíz)
+  EJEMPLO: "Amplitud y velocidad de rotación pélvica en forehand"
+
+- "notas_coach": observaciones generales sobre el plan, progresión esperada, tiempos
+  EJEMPLO: "Esperar mejoras en 2-3 semanas. Si hay resistencia, reducir a 2 series."
+
+═══════════════════════════════════════════════════════════════════
+
+JSON exacto (mantener estructura):
 {{"weekly_focus":"","drill_cards":[{{"title":"","type":"","reps":"","instruction":"","why":""}}],"mental_cues":[],"injury_prevention":[],"plan_semanal":{{"lunes":"","martes":"","miercoles":"","jueves":"","viernes":"","sabado":"","domingo":""}},"ejercicios_prioritarios":[{{"nombre":"","objetivo":"","duracion_minutos":0,"repeticiones":"","descripcion":"","indicador_progreso":""}}],"mensaje_motivacional":"","proxima_sesion_foco":"","notas_coach":""}}"""
 
     msg = client.chat.completions.create(
