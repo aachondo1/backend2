@@ -527,7 +527,7 @@ def assign_level_from_score(score: float) -> str:
 MODEL_MAPPING = {
     "coordinator": "mistralai/mistral-large-2407",
     "specialist":   "deepseek/deepseek-r1",
-    "synthesizer":  "anthropic/claude-3.5-sonnet",
+    "synthesizer":  "z-ai/glm-5",
     "prescription": "openai/gpt-4o-mini",
     "quality":      "google/gemini-flash-1.5"
 }
