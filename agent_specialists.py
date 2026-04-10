@@ -69,10 +69,7 @@ def run_agent_forehand(
           observaciones_detalladas, narrativa_seccion,
           datos_insuficientes
     """
-    import anthropic, os
-
-    _api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-    client   = anthropic.Anthropic(api_key=_api_key)
+    import os
 
     from helpers import (
         format_camera_context,
@@ -80,7 +77,12 @@ def run_agent_forehand(
         format_session_context,
         parse_json_response,
         get_stroke_frames_or_fallback,
+        get_openrouter_client,
+        get_model_for_agent,
     )
+
+    _api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+    client   = get_openrouter_client(_api_key)
 
     camera_ctx    = format_camera_context(camera_orientation)
     equipment_ctx = format_equipment_context(equipment_used, dominant_hand)
@@ -273,12 +275,12 @@ ASIGNACIÓN NIVEL: 0-40 principiante | 41-60 intermedio | 61-80 avanzado | 81-10
 JSON exacto (sin backticks):
 {{"stroke":"forehand","scores":{{"preparacion":{{"score":0,"max":20,"justificacion":""}},"punto_impacto":{{"score":0,"max":20,"justificacion":""}},"follow_through":{{"score":0,"max":20,"justificacion":""}},"posicion_pies":{{"score":0,"max":20,"justificacion":""}},"ritmo_cadencia":{{"score":0,"max":10,"justificacion":""}},"potencia_pelota":{{"score":0,"max":10,"justificacion":""}}}},"total_score":0,"nivel":"principiante|intermedio|avanzado|experto","analisis_tecnico":{{"fortalezas":[],"debilidades":[],"patron_error_principal":"","comparacion_optimo":""}},"metricas_clave":{{"angulo_codo_{dom_abbrev}_impacto":{imp_elbow},"angulo_codo_{dom_abbrev}_promedio":{sum_elbow},"std_codo_{dom_abbrev}":{std_elbow},"flexion_rodilla_{dom_abbrev}_impacto":{imp_knee},"std_rodilla_{dom_abbrev}":{std_knee},"alineacion_hombros":{imp_shoulder},"std_hombros":{std_shoulder},"velocidad_pelota_max":{max_ball_speed},"std_velocidad_pelota":{std_ball}}},"observaciones_detalladas":"","datos_insuficientes":{str(fh_fallback).lower()}}}"""
 
-    msg_json = client.messages.create(
-        model="claude-sonnet-4-6",
+    msg_json = client.chat.completions.create(
+        model=get_model_for_agent("specialist"),
         max_tokens=5000,
         messages=[{"role": "user", "content": prompt}],
     )
-    result = parse_json_response(msg_json.content[0].text)
+    result = parse_json_response(msg_json.choices[0].message.content)
 
     # ── Narrativa (200-300 palabras) ──────────────────────────
     angle_trust  = _angle_trust_hint(camera_orientation)
@@ -288,8 +290,8 @@ JSON exacto (sin backticks):
         "menciona esta limitación brevemente." if fh_fallback else ""
     )
 
-    msg_narrative = client.messages.create(
-        model="claude-sonnet-4-6",
+    msg_narrative = client.chat.completions.create(
+        model=get_model_for_agent("specialist"),
         max_tokens=2000,
         messages=[{"role": "user", "content": f"""Eres biomecánico especialista en forehand de tenis.
 Escribe el análisis narrativo del forehand en 200-300 palabras en español. Prosa técnica, fluida, sin listas.
@@ -303,7 +305,7 @@ Métricas: codo_impacto={imp_elbow}° (óptimo {fh_grip_label}: {fh_elbow_opt}) 
 Grip detectado: {fh_grip_label} — evalúa el codo contra los rangos de este grip, no contra el estándar ATP genérico.
 Interpreta la consistencia: std_codo={std_elbow}° y std_hombros={std_shoulder}° — menciona si el patrón es reproducible o errático."""}],
     )
-    result["narrativa_seccion"]  = msg_narrative.content[0].text.strip()
+    result["narrativa_seccion"]  = msg_narrative.choices[0].message.content.strip()
     result["datos_insuficientes"] = fh_fallback
     return result
 
@@ -341,10 +343,7 @@ def run_agent_backhand(
           observaciones_detalladas, narrativa_seccion,
           datos_insuficientes
     """
-    import anthropic, os
-
-    _api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-    client   = anthropic.Anthropic(api_key=_api_key)
+    import os
 
     from helpers import (
         format_camera_context,
@@ -352,7 +351,12 @@ def run_agent_backhand(
         format_session_context,
         parse_json_response,
         get_stroke_frames_or_fallback,
+        get_openrouter_client,
+        get_model_for_agent,
     )
+
+    _api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+    client   = get_openrouter_client(_api_key)
 
     camera_ctx    = format_camera_context(camera_orientation)
     equipment_ctx = format_equipment_context(equipment_used, dominant_hand)
@@ -557,12 +561,12 @@ ASIGNACIÓN NIVEL: 0-40 principiante | 41-60 intermedio | 61-80 avanzado | 81-10
 JSON exacto (sin backticks):
 {{"stroke":"backhand","scores":{{"preparacion":{{"score":0,"max":20,"justificacion":""}},"punto_impacto":{{"score":0,"max":20,"justificacion":""}},"follow_through":{{"score":0,"max":20,"justificacion":""}},"posicion_pies":{{"score":0,"max":20,"justificacion":""}},"ritmo_cadencia":{{"score":0,"max":10,"justificacion":""}},"potencia_pelota":{{"score":0,"max":10,"justificacion":""}}}},"total_score":0,"nivel":"principiante|intermedio|avanzado|experto","analisis_tecnico":{{"fortalezas":[],"debilidades":[],"patron_error_principal":"","comparacion_optimo":""}},"metricas_clave":{{"angulo_codo_{guide_abbrev}_impacto":{imp_guide_elbow},"angulo_codo_{guide_abbrev}_promedio":{sum_guide_elbow},"std_codo_{guide_abbrev}":{std_elbow},"flexion_rodilla_{knee_side}_impacto":{imp_knee},"std_rodilla":{std_knee},"alineacion_hombros":{imp_shoulder},"std_hombros":{std_shoulder},"velocidad_pelota_max":{max_ball_speed},"std_velocidad_pelota":{std_ball}}},"observaciones_detalladas":"","datos_insuficientes":{str(bh_fallback).lower()}}}"""
 
-    msg_json = client.messages.create(
-        model="claude-sonnet-4-6",
+    msg_json = client.chat.completions.create(
+        model=get_model_for_agent("specialist"),
         max_tokens=5000,
         messages=[{"role": "user", "content": prompt}],
     )
-    result = parse_json_response(msg_json.content[0].text)
+    result = parse_json_response(msg_json.choices[0].message.content)
 
     # ── Narrativa (200-300 palabras) ──────────────────────────
     angle_trust   = _angle_trust_hint(camera_orientation)
@@ -572,8 +576,8 @@ JSON exacto (sin backticks):
         "menciona esta limitación brevemente." if bh_fallback else ""
     )
 
-    msg_narrative = client.messages.create(
-        model="claude-sonnet-4-6",
+    msg_narrative = client.chat.completions.create(
+        model=get_model_for_agent("specialist"),
         max_tokens=2000,
         messages=[{"role": "user", "content": f"""Eres biomecánico especialista en backhand de tenis.
 Escribe el análisis narrativo del backhand en 200-300 palabras en español. Prosa técnica, fluida, sin listas.
@@ -623,10 +627,7 @@ def run_agent_saque(
       - player_position           : contexto táctico de posición en cancha
       - data_quality.impact_validation["saque"]: ball_validated flag
     """
-    import anthropic, os
-
-    _api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-    client   = anthropic.Anthropic(api_key=_api_key)
+    import os
 
     from helpers import (
         format_camera_context,
@@ -634,7 +635,12 @@ def run_agent_saque(
         format_session_context,
         parse_json_response,
         get_stroke_frames_or_fallback,
+        get_openrouter_client,
+        get_model_for_agent,
     )
+
+    _api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+    client   = get_openrouter_client(_api_key)
 
     camera_ctx    = format_camera_context(camera_orientation)
     equipment_ctx = format_equipment_context(equipment_used, dominant_hand)
@@ -780,12 +786,12 @@ ASIGNACIÓN NIVEL: 0-40 principiante | 41-60 intermedio | 61-80 avanzado | 81-10
 JSON exacto (sin backticks):
 {{"stroke":"saque","scores":{{"preparacion_toss":{{"score":0,"max":20,"justificacion":""}},"carga_trophy":{{"score":0,"max":20,"justificacion":""}},"punto_impacto":{{"score":0,"max":20,"justificacion":""}},"follow_through":{{"score":0,"max":20,"justificacion":""}},"ritmo_cadencia":{{"score":0,"max":10,"justificacion":""}},"potencia_pelota":{{"score":0,"max":10,"justificacion":""}}}},"total_score":0,"nivel":"principiante|intermedio|avanzado|experto","analisis_tecnico":{{"fortalezas":[],"debilidades":[],"patron_error_principal":"","comparacion_optimo":""}},"metricas_clave":{{"extension_codo_{dom_abbrev}_impacto":{imp_elbow},"extension_codo_{dom_abbrev}_promedio":{sum_elbow},"std_codo_{dom_abbrev}":{std_elbow},"flexion_rodilla_{dom_abbrev}_carga":{imp_knee},"std_rodilla_{dom_abbrev}":{std_knee},"alineacion_hombros":{imp_shoulder},"std_hombros":{std_shoulder},"velocidad_pelota_max":{max_ball_speed},"std_velocidad_pelota":{std_ball}}},"observaciones_detalladas":"","datos_insuficientes":{str(sq_fallback).lower()}}}"""
 
-    msg_json = client.messages.create(
-        model="claude-sonnet-4-6",
+    msg_json = client.chat.completions.create(
+        model=get_model_for_agent("specialist"),
         max_tokens=5000,
         messages=[{"role": "user", "content": prompt}],
     )
-    result = parse_json_response(msg_json.content[0].text)
+    result = parse_json_response(msg_json.choices[0].message.content)
 
     # ── Narrativa (200-300 palabras) ──────────────────────────
     angle_trust   = _angle_trust_hint(camera_orientation, stroke="saque")
@@ -794,8 +800,8 @@ JSON exacto (sin backticks):
         "menciona esta limitación brevemente." if sq_fallback else ""
     )
 
-    msg_narrative = client.messages.create(
-        model="claude-sonnet-4-6",
+    msg_narrative = client.chat.completions.create(
+        model=get_model_for_agent("specialist"),
         max_tokens=2000,
         messages=[{"role": "user", "content": f"""Eres biomecánico especialista en saque de tenis.
 Escribe el análisis narrativo del saque en 200-300 palabras en español. Prosa técnica, fluida, sin listas.

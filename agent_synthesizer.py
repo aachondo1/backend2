@@ -269,15 +269,16 @@ def run_agent_synthesizer(
       fatigue_analysis, evolucion, prioridades_mejora,
       scores_detalle, reporte_narrativo_completo
     """
-    import anthropic
     from helpers import (
         format_camera_context,
         format_equipment_context,
         format_session_context,
         parse_json_response,
+        get_openrouter_client,
+        get_model_for_agent,
     )
 
-    client        = anthropic.Anthropic(api_key=api_key)
+    client        = get_openrouter_client(api_key)
     camera_ctx    = format_camera_context(camera_orientation)
     equipment_ctx = format_equipment_context(equipment_used, dominant_hand)
     session_ctx   = format_session_context(session_type)
@@ -420,12 +421,11 @@ JSON exacto (sin texto adicional):
   "scores_detalle": {json_scores}
 }}"""
 
-    msg1       = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=5000,
-        system=system1,
-        messages=[{"role": "user", "content": prompt1}],
+    msg1       = client.chat.completions.create(
+        model=get_model_for_agent("synthesizer"), max_tokens=5000,
+        messages=[{"role": "system", "content": system1}, {"role": "user", "content": prompt1}],
     )
-    structured = parse_json_response(msg1.content[0].text)
+    structured = parse_json_response(msg1.choices[0].message.content)
 
     # ════════════════════════════════════════════════════════════════════════════
     # LLAMADA 2 — Reporte narrativo
@@ -508,13 +508,12 @@ ESTRUCTURA QUE DEBES ESCRIBIR (solo estas 4 secciones — los golpes ya están a
 
 Formato: texto continuo sin headers, cada sección separada por doble salto de línea."""
 
-    msg2 = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=6000,
-        system=system2,
-        messages=[{"role": "user", "content": prompt2}],
+    msg2 = client.chat.completions.create(
+        model=get_model_for_agent("synthesizer"), max_tokens=6000,
+        messages=[{"role": "system", "content": system2}, {"role": "user", "content": prompt2}],
     )
 
-    narrative   = msg2.content[0].text.strip()
+    narrative   = msg2.choices[0].message.content.strip()
     full_report = "\n\n".join(filter(None, [seccion_fh, seccion_bh, seccion_sq, narrative]))
 
     # ── Ensamblar output final ────────────────────────────────────────────────

@@ -45,7 +45,7 @@ app = modal.App("tennis-agents-pipeline")
 agents_image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
-        "anthropic==0.40.0",
+        "openai==1.37.0",
         "httpx==0.27.0",
     )
     .add_local_python_source(
@@ -250,13 +250,14 @@ def _agent_synthesizer_legacy(
     dominant_hand:      str  = None,
 ) -> dict:
     """Lógica inline original — conservada como referencia, no se ejecuta."""
-    import anthropic, os, re
+    import os, re
     from helpers import (
         format_camera_context, format_equipment_context,
         format_session_context, parse_json_response,
+        get_openrouter_client, get_model_for_agent,
     )
 
-    client        = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    client        = get_openrouter_client(os.environ.get("OPENROUTER_API_KEY"))
     camera_ctx    = format_camera_context(camera_orientation)
     equipment_ctx = format_equipment_context(equipment_used, dominant_hand)
     session_ctx   = format_session_context(session_type)
@@ -334,11 +335,11 @@ def _agent_synthesizer_legacy(
         + ',"prioridades_mejora":[{"prioridad":1,"golpe":"","dimension":"","score_actual":0,"score_objetivo":0,"impacto_estimado":"","urgencia":"critica|alta|media|baja"}]'
         + ',"scores_detalle":' + json_scores + "}"
     )
-    msg1       = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=5000,
+    msg1       = client.chat.completions.create(
+        model=get_model_for_agent("synthesizer"), max_tokens=5000,
         messages=[{"role": "user", "content": prompt1}],
     )
-    structured = parse_json_response(msg1.content[0].text)
+    structured = parse_json_response(msg1.choices[0].message.content)
 
     seccion_fh = (forehand_data.get("narrativa_seccion", forehand_data.get("observaciones_detalladas", "")) if forehand_data else "")
     seccion_bh = (backhand_data.get("narrativa_seccion", backhand_data.get("observaciones_detalladas", "")) if backhand_data else "")
@@ -364,8 +365,8 @@ def _agent_synthesizer_legacy(
         else "Ángulos 2D con menor confiabilidad — priorizar patrones cualitativos."
     )
 
-    msg2 = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=6000,
+    msg2 = client.chat.completions.create(
+        model=get_model_for_agent("synthesizer"), max_tokens=6000,
         messages=[{"role": "user", "content": f"""Eres analista jefe de tenis de alto rendimiento.
 Ensambla el reporte narrativo final combinando las secciones pre-escritas con tu análisis global.
 Escribe en español, prosa técnica y fluida, sin listas numeradas.
@@ -395,7 +396,7 @@ Formato de entrega: texto continuo sin headers, cada sección separada por salto
     )
 
     structured["reporte_narrativo_completo"] = (
-        f"{seccion_fh}\n\n{seccion_bh}\n\n{seccion_sq}\n\n{msg2.content[0].text.strip()}"
+        f"{seccion_fh}\n\n{seccion_bh}\n\n{seccion_sq}\n\n{msg2.choices[0].message.content.strip()}"
     ).strip()
     structured["global_score"]  = global_score
     structured["scores_detalle"] = scores_summary
@@ -407,19 +408,20 @@ Formato de entrega: texto continuo sin headers, cada sección separada por salto
 # ─── AGENTE COACH ────────────────────────────────────────────
 # Sin cambios respecto a v6
 @app.function(image=agents_image, timeout=180, memory=1024,
-              secrets=[modal.Secret.from_name("anthropic-key")])
+              secrets=[modal.Secret.from_name("openrouter-key")])
 def agent_coach(
     synthesizer_result: dict,
     session_type:       str,
     equipment_used:     dict = None,
     dominant_hand:      str  = None,
 ) -> dict:
-    import anthropic, os
+    import os
     from helpers import (
         format_equipment_context, format_session_context, parse_json_response,
+        get_openrouter_client, get_model_for_agent,
     )
 
-    client        = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    client        = get_openrouter_client(os.environ.get("OPENROUTER_API_KEY"))
     equipment_ctx = format_equipment_context(equipment_used, dominant_hand)
     session_ctx   = format_session_context(session_type)
 
@@ -465,11 +467,11 @@ Reglas para el JSON:
 JSON exacto:
 {{"weekly_focus":"","drill_cards":[{{"title":"","type":"","reps":"","instruction":"","why":""}}],"mental_cues":[],"injury_prevention":[],"plan_semanal":{{"lunes":"","martes":"","miercoles":"","jueves":"","viernes":"","sabado":"","domingo":""}},"ejercicios_prioritarios":[{{"nombre":"","objetivo":"","duracion_minutos":0,"repeticiones":"","descripcion":"","indicador_progreso":""}}],"mensaje_motivacional":"","proxima_sesion_foco":"","notas_coach":""}}"""
 
-    msg = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=4000,
+    msg = client.chat.completions.create(
+        model=get_model_for_agent("prescription"), max_tokens=4000,
         messages=[{"role": "user", "content": prompt}],
     )
-    result = parse_json_response(msg.content[0].text)
+    result = parse_json_response(msg.choices[0].message.content)
 
     if "raw" in result and len(result) == 1:
         result = {
@@ -492,7 +494,7 @@ JSON exacto:
     timeout=900,
     memory=1024,
     secrets=[
-        modal.Secret.from_name("anthropic-key"),
+        modal.Secret.from_name("openrouter-key"),
         modal.Secret.from_name("supabase-key"),
     ],
 )

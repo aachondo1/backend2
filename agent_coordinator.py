@@ -65,10 +65,7 @@ def run_agent_coordinator(
       - camera_quality         : "buena" | "regular" | "mala"
       - camera_angle_detected  : "lateral" | "detras" | "frontal" | "desconocido"
     """
-    import anthropic, os
-
-    _api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-    client   = anthropic.Anthropic(api_key=_api_key)
+    import os
 
     # ── Importar helpers (disponibles en el mismo directorio en Modal) ──
     from helpers import (
@@ -76,7 +73,12 @@ def run_agent_coordinator(
         format_equipment_context,
         format_session_context,
         parse_json_response,
+        get_openrouter_client,
+        get_model_for_agent,
     )
+
+    _api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+    client   = get_openrouter_client(_api_key)
 
     camera_ctx    = format_camera_context(camera_orientation)
     equipment_ctx = format_equipment_context(equipment_used, dominant_hand)
@@ -227,13 +229,13 @@ JSON de respuesta (estructura exacta, sin comentarios):
 }}"""
 
     # ── Llamada al LLM ────────────────────────────────────────
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
+    message = client.chat.completions.create(
+        model=get_model_for_agent("coordinator"),
         max_tokens=4000,
         messages=[{"role": "user", "content": prompt}],
     )
 
-    result = parse_json_response(message.content[0].text)
+    result = parse_json_response(message.choices[0].message.content)
 
     # ── Validación post-LLM: reconciliar active_agents con agent_confidence ──
     # El LLM puede ser inconsistente: marcar activate=true en agent_confidence
