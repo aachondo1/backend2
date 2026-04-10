@@ -553,7 +553,7 @@ PROMEDIOS GLOBALES (sesión completa):
 
 PUNTO DE IMPACTO (instantánea crítica):
 {impact_note}
-  Codo {guide_side} (brazo guía): {imp_guide_elbow}° vs óptimo {bh_range_label} {bh_elbow_opt} (delta: {abs(imp_guide_elbow - bh_range[0]) if imp_guide_elbow < bh_range[0] else abs(imp_guide_elbow - bh_range[1]) if imp_guide_elbow > bh_range[1] else 0}°)
+  Codo {guide_side} (brazo guía): {imp_guide_elbow}° vs óptimo {bh_range_label} {bh_elbow_opt} (delta: {abs(imp_guide_elbow - bh_elbow_range[0]) if imp_guide_elbow < bh_elbow_range[0] else abs(imp_guide_elbow - bh_elbow_range[1]) if imp_guide_elbow > bh_elbow_range[1] else 0}°)
   Rodilla {knee_side}: {imp_knee}° vs óptimo 130-150° (delta: {abs(imp_knee - 140) if imp_knee not in range(130, 151) else 0}°)
   Cadera {guide_side}: {imp_guide_hip}° vs óptimo 140-160° (delta: {abs(imp_guide_hip - 150) if imp_guide_hip not in range(140, 161) else 0}°)
   Alineación hombros: {imp_shoulder}° vs óptimo < 5° (delta: {abs(imp_shoulder)}°)
