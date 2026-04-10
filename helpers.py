@@ -525,8 +525,8 @@ def assign_level_from_score(score: float) -> str:
 # ══════════════════════════════════════════════════════════════
 
 MODEL_MAPPING = {
-    "coordinator": "mistralai/mistral-large-2407",
-    "specialist":   "deepseek/deepseek-r1",
+    "coordinator": "deepseek/deepseek-v3.2",
+    "specialist":   "google/gemini-2.0-flash-001",
     "synthesizer":  "z-ai/glm-5",
     "prescription": "openai/gpt-4o-mini",
     "quality":      "google/gemini-flash-1.5"
