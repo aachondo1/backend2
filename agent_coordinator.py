@@ -105,53 +105,81 @@ def run_agent_coordinator(
         f for f in ball_data.get("frames", []) if f.get("ball_detected")
     ][:50]
 
-    # ── Prompt optimizado para DeepSeek V3.2 ──────────────────
+    # ── Prompt optimizado para DeepSeek V3.2 con máximo contexto ──
     prompt = f"""Eres el coordinador de análisis biomecánico de tenis.
-Tarea: Clasificar la sesión con evidencia clara para activación de agentes.
+Tarea: Clasificar la sesión con razonamiento profundo basado en contexto completo.
 
-═══ CONTEXTO ═══
+═══ CONTEXTO DE SESIÓN ═══
 {session_ctx}
 {camera_ctx}
 {equipment_ctx}
 
-═══ DATOS CLAVE ═══
-MediaPipe (duración: {mediapipe_data['duration_seconds']}s, frames: {mediapipe_data['frames_analyzed']}):
-  Ángulos promedio - Codo D:{mediapipe_data['summary']['avg_right_elbow']}° | C:{mediapipe_data['summary']['avg_left_elbow']}° | Rodilla D:{mediapipe_data['summary']['avg_right_knee']}° | Cadera D:{mediapipe_data['summary']['avg_right_hip']}°
-  Alineación hombros: {mediapipe_data['summary']['avg_shoulder_alignment']}°
+═══ DATOS BIOMECÁNICOS MEDIAPIPE (completo) ═══
+Duración: {mediapipe_data['duration_seconds']}s | Frames analizados: {mediapipe_data['frames_analyzed']}
 
-YOLO - Detección jugador: {yolo_data['detection_rate_percent']}% | Hints: {json.dumps(yolo_data['stroke_hints_summary'])}
+Estadísticas globales por articulación:
+  CODO (dominante): promedio {mediapipe_data['summary']['avg_right_elbow']}° | rango: mín-máx
+  CODO (no dominante): promedio {mediapipe_data['summary']['avg_left_elbow']}°
+  RODILLA (dominante): promedio {mediapipe_data['summary']['avg_right_knee']}°
+  RODILLA (no dominante): promedio {mediapipe_data['summary']['avg_left_knee']}°
+  CADERA (dominante): promedio {mediapipe_data['summary']['avg_right_hip']}°
+  CADERA (no dominante): promedio {mediapipe_data['summary']['avg_left_hip']}°
+  HOMBROS (alineación): promedio {mediapipe_data['summary']['avg_shoulder_alignment']}°
 
-Pelota - Detección: {ball_data['ball_detection_rate_percent']}% | Vel máx: {ball_data['max_ball_speed_pixels']} px/frame | Eventos: {len(ball_frames_detected)}
+Muestra de frames (primeros 30 completos con ángulos y landmarks):
+{json.dumps(mediapipe_data.get('frames', [])[:30], indent=2)}
 
+═══ DETECCIÓN YOLO (visión) ═══
+Tasa de detección jugador: {yolo_data['detection_rate_percent']}%
+Hints de golpes por tipo:
+{json.dumps(yolo_data['stroke_hints_summary'], indent=2)}
+
+═══ SEGUIMIENTO PELOTA ═══
+Tasa de detección: {ball_data['ball_detection_rate_percent']}%
+Velocidad máxima: {ball_data['max_ball_speed_pixels']} px/frame
+Eventos detectados: {len(ball_frames_detected)}
+
+Detalle de eventos de pelota (primeros 50):
+{json.dumps(ball_frames_detected[:50], indent=2)}
+
+═══ ANÁLISIS STATS PRE-COMPUTADO ═══
 {stroke_stats_block}
+
+═══ CONTEXTO TÁCTICO ═══
 {tactical_block}
+
+═══ EVALUACIÓN CALIDAD DE DATOS ═══
 {data_quality_block}
 
-Frames muestra (primeros 15):
-{json.dumps(mediapipe_data.get('frames', [])[:15], indent=2)}
+═══ LÓGICA DE RAZONAMIENTO ═══
 
-Eventos de pelota ({len(ball_frames_detected)}):
-{json.dumps(ball_frames_detected[:30], indent=2)}
+PASO 1 - ACTIVACIÓN DE AGENTES:
+Analiza evidencia CONVERGENTE de 3 fuentes:
+  • YOLO: hints de golpes por tipo (count ≥ 3 = señal fuerte)
+  • Ball tracking: impactos asignables por velocidad y timing (≥ 2 = señal fuerte)
+  • MediaPipe ángulos: patrones de codo consistentes con tipo de golpe
+Activa golpe SI: (YOLO ≥ 3) O (ball impacts ≥ 2) O (ambos presentes aunque menores)
+Documenta TODAS las fuentes de evidencia en agent_confidence.
 
-═══ LÓGICA DE DECISIÓN ═══
+PASO 2 - CLASIFICACIÓN DE FASES (para cada golpe activo):
+Usa CODO DOMINANTE como señal principal de movimiento:
+  preparacion: ángulo CERRADO (mínimo local) → inicio armado
+  aceleracion: ángulo ASCENDENTE (cierra→abre progresivamente) → despliegue
+  impacto: ángulo MÁXIMO local O ball_speed máxima → contacto con pelota
+  followthrough: ángulo DESCENDENTE (post-impacto) → deceleración
 
-ACTIVE_AGENTS:
-  • Activar golpe SI: (YOLO hints ≥ 3 para ese tipo) O (ball impacts ≥ 2 asignables a ese tipo)
-  • Documentar evidencia exacta en agent_confidence
+Proporciona ÍNDICES enteros secuenciales de frames (campo "frame" en MediaPipe).
+Las listas pueden estar vacías si no hay frames claros para esa fase.
+Asegúrate que fases no se superpongan y sean progresivas en el tiempo.
 
-FRAMES_BY_STROKE (para cada golpe activo):
-  Usa codo dominante como señal principal:
-  - preparacion: codo MÍNIMO (más cerrado) → inicio del swing
-  - aceleracion: codo ASCENDENTE (cierra→abre) → aceleración
-  - impacto: codo MÁXIMO o pelota máx velocidad → contacto
-  - followthrough: codo DESCENDENTE post-impacto → desaceleración
-  Proporciona ÍNDICES enteros del campo "frame" en MediaPipe.
+PASO 3 - IMPACTOS CON PELOTA:
+Cruza ball_frames (ball_speed > 0) con frames MediaPipe cercanos (diff_ms < 100ms).
+Para cada impacto válido:
+  - stroke_type: asigna basado en YOLO hints + ángulos MediaPipe contextuales
+  - Incluye ángulos completos de articulaciones en punto de impacto
+  - Captura alineación de hombros
 
-IMPACT_FRAMES:
-  Cruza ball_frames (con ball_speed > 0) con frames MediaPipe más cercanos (diff_ms < 100ms).
-  Clasifica stroke_type según hints YOLO + contexto de ángulos.
-
-═══ FORMATO JSON (exacto, sin comentarios) ═══
+═══ SALIDA JSON (estructura exacta) ═══
 {{
   "session_type": "{session_type}",
   "camera_quality": "buena|regular|mala",
@@ -160,23 +188,23 @@ IMPACT_FRAMES:
   "active_agents": ["forehand", "backhand"],
 
   "agent_confidence": {{
-    "forehand": {{"activate": true, "confidence": 0.9, "evidence": "YOLO hints: 8 | ball impacts: 3 | ángulos consistentes con derecha"}},
-    "backhand": {{"activate": false, "confidence": 0.2, "evidence": ""}},
-    "saque": {{"activate": false, "confidence": 0.0, "evidence": ""}}
+    "forehand": {{"activate": true, "confidence": 0.85, "evidence": "YOLO: 7 hints | Ball impacts: 2 eventos | Ángulos codo 45-95° consistentes con derecha"}},
+    "backhand": {{"activate": true, "confidence": 0.65, "evidence": "YOLO: 4 hints | Ball impacts: 1 evento | Ángulos codo 50-100° presentes"}},
+    "saque": {{"activate": false, "confidence": 0.2, "evidence": "YOLO: <3 hints | Ball impacts: 0 | Altura de codo inconsistente con saque"}}
   }},
 
   "impact_frames": [
-    {{"timestamp": 0.0, "frame": 0, "stroke_type": "forehand", "ball_speed": 0.0, "diff_ms": 0, "right_elbow": 0.0, "left_elbow": 0.0, "right_knee": 0.0, "left_knee": 0.0, "right_hip": 0.0, "left_hip": 0.0, "shoulder_alignment": 0.0}}
+    {{"timestamp": 1.23, "frame": 30, "stroke_type": "forehand", "ball_speed": 8.5, "diff_ms": 15, "right_elbow": 85.2, "left_elbow": 120.5, "right_knee": 95.0, "left_knee": 105.0, "right_hip": 110.0, "left_hip": 115.0, "shoulder_alignment": 5.2}}
   ],
 
   "frames_by_stroke": {{
-    "forehand": {{"preparacion": [0, 1, 2], "aceleracion": [3, 4, 5], "impacto": [6, 7], "followthrough": [8, 9, 10]}},
-    "backhand": {{"preparacion": [], "aceleracion": [], "impacto": [], "followthrough": []}},
+    "forehand": {{"preparacion": [8, 9, 10, 11], "aceleracion": [12, 13, 14, 15, 16], "impacto": [17, 18], "followthrough": [19, 20, 21, 22]}},
+    "backhand": {{"preparacion": [40, 41], "aceleracion": [42, 43, 44], "impacto": [45], "followthrough": [46, 47]}},
     "saque": {{"preparacion": [], "aceleracion": [], "impacto": [], "followthrough": []}}
   }},
 
-  "data_quality_notes": "Observaciones sobre calidad de detección",
-  "general_observations": "Notas generales de la sesión"
+  "data_quality_notes": "Observaciones sobre confiabilidad: cobertura de poses, oclusiones, detección de pelota",
+  "general_observations": "Patrones generales: lateralidad, postura, movimientos repetitivos"
 }}"""
 
     # ── Llamada al LLM ────────────────────────────────────────
