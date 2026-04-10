@@ -65,10 +65,7 @@ def run_agent_coordinator(
       - camera_quality         : "buena" | "regular" | "mala"
       - camera_angle_detected  : "lateral" | "detras" | "frontal" | "desconocido"
     """
-    import anthropic, os
-
-    _api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-    client   = anthropic.Anthropic(api_key=_api_key)
+    import os
 
     # ── Importar helpers (disponibles en el mismo directorio en Modal) ──
     from helpers import (
@@ -76,7 +73,12 @@ def run_agent_coordinator(
         format_equipment_context,
         format_session_context,
         parse_json_response,
+        get_openrouter_client,
+        get_model_for_agent,
     )
+
+    _api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+    client   = get_openrouter_client(_api_key)
 
     camera_ctx    = format_camera_context(camera_orientation)
     equipment_ctx = format_equipment_context(equipment_used, dominant_hand)
@@ -103,137 +105,116 @@ def run_agent_coordinator(
         f for f in ball_data.get("frames", []) if f.get("ball_detected")
     ][:50]
 
-    # ── Prompt ───────────────────────────────────────────────
-    prompt = f"""Eres el coordinador de un sistema de análisis biomecánico de tenis.
-Tu tarea es clasificar la sesión para que agentes especializados puedan analizarla con precisión.
-Responde SOLO con JSON válido, sin texto adicional, sin backticks.
+    # ── Prompt optimizado para DeepSeek V3.2 con máximo contexto ──
+    prompt = f"""Eres el coordinador de análisis biomecánico de tenis.
+Tarea: Clasificar la sesión con razonamiento profundo basado en contexto completo.
 
+═══ CONTEXTO DE SESIÓN ═══
 {session_ctx}
-
 {camera_ctx}
-
 {equipment_ctx}
 
-══ DATOS MEDIAPIPE ══
+═══ DATOS BIOMECÁNICOS MEDIAPIPE (completo) ═══
 Duración: {mediapipe_data['duration_seconds']}s | Frames analizados: {mediapipe_data['frames_analyzed']}
-Promedios globales:
-  codo der: {mediapipe_data['summary']['avg_right_elbow']}° | izq: {mediapipe_data['summary']['avg_left_elbow']}°
-  rodilla der: {mediapipe_data['summary']['avg_right_knee']}° | izq: {mediapipe_data['summary']['avg_left_knee']}°
-  cadera der: {mediapipe_data['summary']['avg_right_hip']}° | izq: {mediapipe_data['summary']['avg_left_hip']}°
-  hombros (alineación): {mediapipe_data['summary']['avg_shoulder_alignment']}°
-Muestra de frames (primeros 20):
-{json.dumps(mediapipe_data.get('frames', [])[:20], indent=2)}
 
-══ DATOS YOLO ══
-Detección jugador: {yolo_data['detection_rate_percent']}%
-Hints de golpes detectados: {json.dumps(yolo_data['stroke_hints_summary'])}
+Estadísticas globales por articulación:
+  CODO (dominante): promedio {mediapipe_data['summary']['avg_right_elbow']}° | rango: mín-máx
+  CODO (no dominante): promedio {mediapipe_data['summary']['avg_left_elbow']}°
+  RODILLA (dominante): promedio {mediapipe_data['summary']['avg_right_knee']}°
+  RODILLA (no dominante): promedio {mediapipe_data['summary']['avg_left_knee']}°
+  CADERA (dominante): promedio {mediapipe_data['summary']['avg_right_hip']}°
+  CADERA (no dominante): promedio {mediapipe_data['summary']['avg_left_hip']}°
+  HOMBROS (alineación): promedio {mediapipe_data['summary']['avg_shoulder_alignment']}°
 
-══ DATOS PELOTA ══
-Detección pelota: {ball_data['ball_detection_rate_percent']}% | vel máx: {ball_data['max_ball_speed_pixels']} px/frame
-Frames con pelota ({len(ball_frames_detected)} eventos):
-{json.dumps(ball_frames_detected, indent=2)}
+Muestra de frames (primeros 30 completos con ángulos y landmarks):
+{json.dumps(mediapipe_data.get('frames', [])[:30], indent=2)}
 
+═══ DETECCIÓN YOLO (visión) ═══
+Tasa de detección jugador: {yolo_data['detection_rate_percent']}%
+Hints de golpes por tipo:
+{json.dumps(yolo_data['stroke_hints_summary'], indent=2)}
+
+═══ SEGUIMIENTO PELOTA ═══
+Tasa de detección: {ball_data['ball_detection_rate_percent']}%
+Velocidad máxima: {ball_data['max_ball_speed_pixels']} px/frame
+Eventos detectados: {len(ball_frames_detected)}
+
+Detalle de eventos de pelota (primeros 50):
+{json.dumps(ball_frames_detected[:50], indent=2)}
+
+═══ ANÁLISIS STATS PRE-COMPUTADO ═══
 {stroke_stats_block}
 
+═══ CONTEXTO TÁCTICO ═══
 {tactical_block}
 
+═══ EVALUACIÓN CALIDAD DE DATOS ═══
 {data_quality_block}
 
-══ INSTRUCCIONES DE CLASIFICACIÓN ══
+═══ LÓGICA DE RAZONAMIENTO ═══
 
-1. ACTIVE_AGENTS: Incluye un golpe solo si hay evidencia suficiente (≥3 hints YOLO
-   O ≥2 impactos con pelota de ese tipo). Usa agent_confidence para documentar
-   la evidencia de cada decisión.
+PASO 1 - ACTIVACIÓN DE AGENTES:
+Analiza evidencia CONVERGENTE de 3 fuentes:
+  • YOLO: hints de golpes por tipo (count ≥ 3 = señal fuerte)
+  • Ball tracking: impactos asignables por velocidad y timing (≥ 2 = señal fuerte)
+  • MediaPipe ángulos: patrones de codo consistentes con tipo de golpe
+Activa golpe SI: (YOLO ≥ 3) O (ball impacts ≥ 2) O (ambos presentes aunque menores)
+Documenta TODAS las fuentes de evidencia en agent_confidence.
 
-2. FRAMES_BY_STROKE CON FASES: Para cada golpe activo, clasifica los frames
-   mediapipe en 4 fases usando el ángulo del codo dominante como señal principal:
-   - preparacion  : codo más CERRADO (mínimo local del ángulo de codo dominante)
-   - aceleracion  : transición ascendente del ángulo (de mínimo hacia máximo)
-   - impacto      : codo más ABIERTO o punto de máxima velocidad de pelota
-   - followthrough: ángulo desciende post-impacto hasta recuperar posición base
-   Proporciona ÍNDICES ENTEROS de frame (campo "frame" en los datos MediaPipe).
-   Pueden ser listas vacías si no hay frames claros para esa fase.
+PASO 2 - CLASIFICACIÓN DE FASES (para cada golpe activo):
+Usa CODO DOMINANTE como señal principal de movimiento:
+  preparacion: ángulo CERRADO (mínimo local) → inicio armado
+  aceleracion: ángulo ASCENDENTE (cierra→abre progresivamente) → despliegue
+  impacto: ángulo MÁXIMO local O ball_speed máxima → contacto con pelota
+  followthrough: ángulo DESCENDENTE (post-impacto) → deceleración
 
-3. IMPACT_FRAMES: Cruza los eventos de pelota (ball_frames_detected) con los
-   frames MediaPipe más cercanos en timestamp. Incluye solo impactos con
-   ball_speed > 0 y diff_ms razonable (pelota y pose del mismo instante).
+Proporciona ÍNDICES enteros secuenciales de frames (campo "frame" en MediaPipe).
+Las listas pueden estar vacías si no hay frames claros para esa fase.
+Asegúrate que fases no se superpongan y sean progresivas en el tiempo.
 
-JSON de respuesta (estructura exacta, sin comentarios):
+PASO 3 - IMPACTOS CON PELOTA:
+Cruza ball_frames (ball_speed > 0) con frames MediaPipe cercanos (diff_ms < 100ms).
+Para cada impacto válido:
+  - stroke_type: asigna basado en YOLO hints + ángulos MediaPipe contextuales
+  - Incluye ángulos completos de articulaciones en punto de impacto
+  - Captura alineación de hombros
+
+═══ SALIDA JSON (estructura exacta) ═══
 {{
   "session_type": "{session_type}",
   "camera_quality": "buena|regular|mala",
   "camera_angle_detected": "lateral|detras|frontal|desconocido",
 
-  "active_agents": [],
+  "active_agents": ["forehand", "backhand"],
 
   "agent_confidence": {{
-    "forehand": {{
-      "activate": true,
-      "confidence": 0.0,
-      "evidence": "descripción breve de qué datos lo soportan"
-    }},
-    "backhand": {{
-      "activate": false,
-      "confidence": 0.0,
-      "evidence": ""
-    }},
-    "saque": {{
-      "activate": false,
-      "confidence": 0.0,
-      "evidence": ""
-    }}
+    "forehand": {{"activate": true, "confidence": 0.85, "evidence": "YOLO: 7 hints | Ball impacts: 2 eventos | Ángulos codo 45-95° consistentes con derecha"}},
+    "backhand": {{"activate": true, "confidence": 0.65, "evidence": "YOLO: 4 hints | Ball impacts: 1 evento | Ángulos codo 50-100° presentes"}},
+    "saque": {{"activate": false, "confidence": 0.2, "evidence": "YOLO: <3 hints | Ball impacts: 0 | Altura de codo inconsistente con saque"}}
   }},
 
   "impact_frames": [
-    {{
-      "timestamp": 0.0,
-      "frame": 0,
-      "stroke_type": "forehand|backhand|saque|desconocido",
-      "ball_speed": 0.0,
-      "diff_ms": 0,
-      "right_elbow": 0.0,
-      "left_elbow": 0.0,
-      "right_knee": 0.0,
-      "left_knee": 0.0,
-      "right_hip": 0.0,
-      "left_hip": 0.0,
-      "shoulder_alignment": 0.0
-    }}
+    {{"timestamp": 1.23, "frame": 30, "stroke_type": "forehand", "ball_speed": 8.5, "diff_ms": 15, "right_elbow": 85.2, "left_elbow": 120.5, "right_knee": 95.0, "left_knee": 105.0, "right_hip": 110.0, "left_hip": 115.0, "shoulder_alignment": 5.2}}
   ],
 
   "frames_by_stroke": {{
-    "forehand": {{
-      "preparacion":   [],
-      "aceleracion":   [],
-      "impacto":       [],
-      "followthrough": []
-    }},
-    "backhand": {{
-      "preparacion":   [],
-      "aceleracion":   [],
-      "impacto":       [],
-      "followthrough": []
-    }},
-    "saque": {{
-      "preparacion":   [],
-      "aceleracion":   [],
-      "impacto":       [],
-      "followthrough": []
-    }}
+    "forehand": {{"preparacion": [8, 9, 10, 11], "aceleracion": [12, 13, 14, 15, 16], "impacto": [17, 18], "followthrough": [19, 20, 21, 22]}},
+    "backhand": {{"preparacion": [40, 41], "aceleracion": [42, 43, 44], "impacto": [45], "followthrough": [46, 47]}},
+    "saque": {{"preparacion": [], "aceleracion": [], "impacto": [], "followthrough": []}}
   }},
 
-  "data_quality_notes": "",
-  "general_observations": ""
+  "data_quality_notes": "Observaciones sobre confiabilidad: cobertura de poses, oclusiones, detección de pelota",
+  "general_observations": "Patrones generales: lateralidad, postura, movimientos repetitivos"
 }}"""
 
     # ── Llamada al LLM ────────────────────────────────────────
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
+    message = client.chat.completions.create(
+        model=get_model_for_agent("coordinator"),
         max_tokens=4000,
         messages=[{"role": "user", "content": prompt}],
     )
 
-    result = parse_json_response(message.content[0].text)
+    result = parse_json_response(message.choices[0].message.content)
 
     # ── Validación post-LLM: reconciliar active_agents con agent_confidence ──
     # El LLM puede ser inconsistente: marcar activate=true en agent_confidence

@@ -518,3 +518,50 @@ def assign_level_from_score(score: float) -> str:
         return "avanzado"
     else:
         return "experto"
+
+
+# ══════════════════════════════════════════════════════════════
+# OPENROUTER CONFIGURATION
+# ══════════════════════════════════════════════════════════════
+
+MODEL_MAPPING = {
+    "coordinator": "deepseek/deepseek-v3.2",
+    "specialist":   "google/gemini-2.0-flash-001",
+    "synthesizer":  "z-ai/glm-5",
+    "prescription": "openai/gpt-4o-mini",
+    "quality":      "google/gemini-flash-1.5"
+}
+
+
+def get_openrouter_client(api_key: str = None):
+    """
+    Crea un cliente OpenAI compatible con OpenRouter.
+    OpenRouter proporciona un endpoint OpenAI-compatible en https://openrouter.io/api/v1
+
+    Args:
+        api_key: OpenRouter API key. Si no se proporciona, se lee de OPENROUTER_API_KEY
+
+    Returns:
+        Cliente OpenAI configurado para usar OpenRouter
+    """
+    from openai import OpenAI
+    import os
+
+    _api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+    return OpenAI(
+        api_key=_api_key,
+        base_url="https://openrouter.io/api/v1"
+    )
+
+
+def get_model_for_agent(agent_type: str) -> str:
+    """
+    Retorna el modelo OpenRouter para un tipo de agente específico.
+
+    Args:
+        agent_type: "coordinator", "specialist", "synthesizer", "prescription", "quality"
+
+    Returns:
+        Model ID en OpenRouter (ej: "mistralai/mistral-large-2407")
+    """
+    return MODEL_MAPPING.get(agent_type, "mistralai/mistral-large-2407")
