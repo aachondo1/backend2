@@ -384,14 +384,21 @@ PASO 3 — DELTA Y EVOLUCIÓN (comparativa sesión anterior):
 
 PASO 4 — PRIORIDADES MEJORADAS (reasoning):
 Calcula urgencia combinando:
-  • Score actual vs benchmark del nivel detectado
+  • Score actual vs benchmark del nivel detectado (ver tabla abajo)
   • Golpes afectados por problema
   • Accionabilidad (¿hay drill directo?)
+
+BENCHMARKS DE REFERENCIA POR NIVEL:
+  principiante : FH 35-50, BH 30-45, Saque 25-40, Global 35-48
+  intermedio   : FH 55-70, BH 50-65, Saque 45-65, Global 52-67
+  avanzado     : FH 72-85, BH 68-82, Saque 68-80, Global 70-82
+  experto      : FH 85+,   BH 82+,   Saque 80+,   Global 82+
+
 Ejemplo urgencia mapping:
-  • critica: root_cause + afecta 2+ golpes + score < 40
+  • critica: root_cause + afecta 2+ golpes + score < 40 O muy por debajo del benchmark del nivel
   • alta: score 40-60 + afecta múltiples OR score < 50 + afecta 1 golpe crítico
-  • media: score 60-80 + aspecto específico
-  • baja: score > 75 OR refinamiento menor
+  • media: score 60-80 + aspecto específico o en rango bajo del benchmark
+  • baja: score > 75 OR refinamiento menor que lleva al siguiente nivel
 
 ═══ JSON EXACTO (sin texto adicional) ═══
 {{
@@ -524,8 +531,13 @@ DATOS CONTEXTUALES:
    TONO: Preventivo, educativo, claro sobre riesgos reales
 
 3. COMPARACIÓN CON REFERENCIA (1 párrafo)
-   • DÓNDE ESTÁ: Posiciona al jugador dentro de su rango de nivel actual
-   • BENCHMARK: Qué esperar de un jugador {structured.get('nivel_general', '')} promedio
+   BENCHMARKS DE REFERENCIA (usar estos datos — no inventar):
+     principiante : FH 35-50, BH 30-45, Saque 25-40, Global 35-48
+     intermedio   : FH 55-70, BH 50-65, Saque 45-65, Global 52-67
+     avanzado     : FH 72-85, BH 68-82, Saque 68-80, Global 70-82
+     experto      : FH 85+,   BH 82+,   Saque 80+,   Global 82+
+   • DÓNDE ESTÁ: Posiciona al jugador dentro del rango de nivel {structured.get('nivel_general', '')} según la tabla
+   • BENCHMARK: Qué esperar de un jugador {structured.get('nivel_general', '')} promedio (usar tabla)
    • BRECHA: Qué dimensiones lo acercan vs lo alejan del siguiente nivel
    • VENTANAS DE MEJORA: Cuáles son realistas a corto plazo (2-3 sesiones)
    TONO: Realista, motivador, comparativo

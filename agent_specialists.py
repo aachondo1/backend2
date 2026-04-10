@@ -619,7 +619,7 @@ DIMENSIONES (máx 100 total):
      - Indicador: ball_speed máx y variación
      - SLICE: velocidad menor es NORMAL — NO penalizar
      - TOPSPIN: mayor velocidad esperada
-     - {ball_validated and "✓ Ball validated" or "⚠️ NO validado - score = 0"}
+     - {bh_ball_validated and "✓ Ball validated" or "⚠️ NO validado - score = 0"}
 
 ═══ INSTRUCCIONES CRÍTICAS ═══
 
@@ -677,7 +677,7 @@ Métricas: codo_guía_impacto={imp_guide_elbow}° (óptimo {bh_range_label}: {bh
 Interpreta la consistencia: std_codo_guía={std_elbow}° y std_hombros={std_shoulder}° — menciona si el patrón es reproducible o errático.
 Si es SLICE: comenta la eficacia táctica del approach, no solo la biomecánica."""}],
     )
-    result["narrativa_seccion"]   = msg_narrative.content[0].text.strip()
+    result["narrativa_seccion"]   = msg_narrative.choices[0].message.content.strip()
     result["datos_insuficientes"] = bh_fallback
     return result
 
@@ -948,7 +948,7 @@ Error principal: {result.get('analisis_tecnico', {}).get('patron_error_principal
 Métricas: codo_impacto={imp_elbow}° (±{std_elbow}°) | rodilla_trophy={imp_knee}° (±{std_knee}°) | hombros={imp_shoulder}° (±{std_shoulder}°) | pelota_max={max_ball_speed}px (±{std_ball}px)
 Fatiga: {fatigue_note}"""}],
     )
-    result["narrativa_seccion"]   = msg_narrative.content[0].text.strip()
+    result["narrativa_seccion"]   = msg_narrative.choices[0].message.content.strip()
     result["datos_insuficientes"] = sq_fallback
     return result
 

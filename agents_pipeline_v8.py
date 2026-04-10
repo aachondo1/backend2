@@ -96,7 +96,7 @@ def supabase_post(url: str, key: str, table: str, data: dict) -> dict | None:
 
 # ─── AGENTE COORDINADOR ──────────────────────────────────────
 @app.function(image=agents_image, timeout=120, memory=1024,
-              secrets=[modal.Secret.from_name("anthropic-key")])
+              secrets=[modal.Secret.from_name("openrouter-key")])
 def agent_coordinator(
     mediapipe_data:     dict,
     yolo_data:          dict,
@@ -122,13 +122,13 @@ def agent_coordinator(
         stroke_stats       = stroke_stats,
         tactical_context   = tactical_context,
         data_quality       = data_quality,
-        api_key            = os.environ["ANTHROPIC_API_KEY"],
+        api_key            = os.environ["OPENROUTER_API_KEY"],
     )
 
 
 # ─── AGENTE FOREHAND ─────────────────────────────────────────
 @app.function(image=agents_image, timeout=120, memory=1024,
-              secrets=[modal.Secret.from_name("anthropic-key")])
+              secrets=[modal.Secret.from_name("openrouter-key")])
 def agent_forehand(
     coordinator_data:   dict,
     mediapipe_data:     dict,
@@ -148,13 +148,13 @@ def agent_forehand(
         equipment_used     = equipment_used,
         dominant_hand      = dominant_hand,
         session_type       = session_type,
-        api_key            = os.environ["ANTHROPIC_API_KEY"],
+        api_key            = os.environ["OPENROUTER_API_KEY"],
     )
 
 
 # ─── AGENTE BACKHAND ─────────────────────────────────────────
 @app.function(image=agents_image, timeout=120, memory=1024,
-              secrets=[modal.Secret.from_name("anthropic-key")])
+              secrets=[modal.Secret.from_name("openrouter-key")])
 def agent_backhand(
     coordinator_data:   dict,
     mediapipe_data:     dict,
@@ -174,13 +174,13 @@ def agent_backhand(
         equipment_used     = equipment_used,
         dominant_hand      = dominant_hand,
         session_type       = session_type,
-        api_key            = os.environ["ANTHROPIC_API_KEY"],
+        api_key            = os.environ["OPENROUTER_API_KEY"],
     )
 
 
 # ─── AGENTE SAQUE ────────────────────────────────────────────
 @app.function(image=agents_image, timeout=120, memory=1024,
-              secrets=[modal.Secret.from_name("anthropic-key")])
+              secrets=[modal.Secret.from_name("openrouter-key")])
 def agent_saque(
     coordinator_data:   dict,
     mediapipe_data:     dict,
@@ -200,14 +200,14 @@ def agent_saque(
         equipment_used     = equipment_used,
         dominant_hand      = dominant_hand,
         session_type       = session_type,
-        api_key            = os.environ["ANTHROPIC_API_KEY"],
+        api_key            = os.environ["OPENROUTER_API_KEY"],
     )
 
 
 # ─── AGENTE SINTETIZADOR ─────────────────────────────────────
 # Delega a agent_synthesizer.py (igual que los especialistas)
 @app.function(image=agents_image, timeout=300, memory=1024,
-              secrets=[modal.Secret.from_name("anthropic-key")])
+              secrets=[modal.Secret.from_name("openrouter-key")])
 def agent_synthesizer(
     coordinator_data:   dict,
     forehand_data:      dict,
@@ -233,7 +233,7 @@ def agent_synthesizer(
         camera_orientation = camera_orientation,
         equipment_used     = equipment_used,
         dominant_hand      = dominant_hand,
-        api_key            = os.environ["ANTHROPIC_API_KEY"],
+        api_key            = os.environ["OPENROUTER_API_KEY"],
     )
 
 

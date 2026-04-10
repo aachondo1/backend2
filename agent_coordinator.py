@@ -126,8 +126,8 @@ Estadísticas globales por articulación:
   CADERA (no dominante): promedio {mediapipe_data['summary']['avg_left_hip']}°
   HOMBROS (alineación): promedio {mediapipe_data['summary']['avg_shoulder_alignment']}°
 
-Muestra de frames (primeros 30 completos con ángulos y landmarks):
-{json.dumps(mediapipe_data.get('frames', [])[:30], indent=2)}
+Muestra de frames clave (15 frames distribuidos):
+{json.dumps(mediapipe_data.get('frames', [])[:15], indent=2)}
 
 ═══ DETECCIÓN YOLO (visión) ═══
 Tasa de detección jugador: {yolo_data['detection_rate_percent']}%
@@ -162,11 +162,14 @@ Activa golpe SI: (YOLO ≥ 3) O (ball impacts ≥ 2) O (ambos presentes aunque m
 Documenta TODAS las fuentes de evidencia en agent_confidence.
 
 PASO 2 - CLASIFICACIÓN DE FASES (para cada golpe activo):
-Usa CODO DOMINANTE como señal principal de movimiento:
-  preparacion: ángulo CERRADO (mínimo local) → inicio armado
-  aceleracion: ángulo ASCENDENTE (cierra→abre progresivamente) → despliegue
-  impacto: ángulo MÁXIMO local O ball_speed máxima → contacto con pelota
-  followthrough: ángulo DESCENDENTE (post-impacto) → deceleración
+Usa CODO DOMINANTE como señal principal de movimiento.
+
+RANGOS DE REFERENCIA POR FASE (codo dominante):
+  preparacion  : 30-70°   → ángulo cerrado (armado), mínimo local
+  aceleracion  : 70-120°  → ángulo creciente (despliegue hacia impacto)
+  impacto      : 120-160° → extensión máxima local O ball_speed pico
+  followthrough: 80-140°  → ángulo descendente (deceleración post-impacto)
+  [SAQUE] impacto: 150-170° → extensión mayor que groundstrokes, NO aplicar rango 120-160°
 
 Proporciona ÍNDICES enteros secuenciales de frames (campo "frame" en MediaPipe).
 Las listas pueden estar vacías si no hay frames claros para esa fase.
