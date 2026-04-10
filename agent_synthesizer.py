@@ -353,70 +353,94 @@ def run_agent_synthesizer(
         f"{system_tone}"
     )
 
-    prompt1 = f"""{context}
+    prompt1 = f"""═══ DATOS COMPLETOS DE SESIÓN ═══
+{context}
 
-ANÁLISIS COMPLETO DE ESPECIALISTAS:
+═══ ANÁLISIS PROFUNDO DE ESPECIALISTAS ═══
 {json_scores}
 
-INSTRUCCIÓN — root_cause (campo obligatorio):
-Identifica el problema raíz compartido entre golpes, si existe.
-Si forehand Y backhand fallan por lo mismo (ej: rodillas estiradas, preparación tardía,
-falta de rotación de caderas) → ese es el root_cause, no los síntomas individuales.
-Si no hay patrón común claro → "No se detectó causa raíz común entre golpes".
+═══ FRAMEWORK DE ANÁLISIS INTEGRADO ═══
 
-INSTRUCCIÓN — top_3_insights:
-Ordena por IMPACTO REAL en el juego. PRIORIZA insights cruzados (afectan 2+ golpes).
-Un problema de footwork que afecta FH y BH es más importante que un error de muñeca aislado.
-Si la fatiga afecta múltiples golpes → es un insight válido de tipo "fatiga".
-Cada insight debe ser accionable en la próxima sesión.
+PASO 1 — ROOT CAUSE ANALYSIS (obligatorio):
+Examina TODAS las debilidades reportadas por especialistas. Busca el problema fundamental.
+  • Si FH y BH fallan: ¿es falta de rotación de caderas? ¿rodillas estiradas? ¿preparación tardía?
+  • Si saque falla: ¿es trophy position débil? ¿extension inconsistente?
+  • Si TODOS los golpes degradan: ¿fatiga? ¿falta de footwork? ¿inconsistencia general?
+Respuesta: SI hay patrón común → ése es el root_cause.
+         NO hay patrón común claro → "No se detectó causa raíz común entre golpes"
 
-INSTRUCCIÓN — evolucion:
-{"Calcula delta por golpe. Si algún golpe retrocedió > 5 pts, refléjalo en tendencia y progreso_global." if previous_session else "Sin historial — tendencia: primera_sesion."}
-{f"DELTA HEADLINE a respetar: {delta_headline}" if delta_headline else ""}
+PASO 2 — PATRONES CRUZADOS (top_3_insights):
+Analiza impacto REAL en el juego:
+  • Footwork problem afecta FH + BH + SAQUE = MÁXIMO impacto (activa en los 3)
+  • Hombro cerrado solo en FH = impacto bajo (1 golpe)
+  • Fatiga que degrada múltiples dimensiones = impacto alto (sistémico)
+ORDENA por:
+  1. Golpes afectados (cuantos más, más impacto)
+  2. Magnitud del efecto (5pts en FH pero solo 2pts en BH = impact medio)
+  3. Accionabilidad (drill concreto disponible)
 
-JSON exacto (sin texto adicional):
+PASO 3 — DELTA Y EVOLUCIÓN (comparativa sesión anterior):
+{"Si hay historial: calcula delta EXACTO por golpe. Si retroceso > 5pts en cualquier dimensión → refleja en tendencia + alarma. Progreso global = promedio de deltas." if previous_session else "Sin historial: tendencia OBLIGATORIA = primera_sesion"}
+
+PASO 4 — PRIORIDADES MEJORADAS (reasoning):
+Calcula urgencia combinando:
+  • Score actual vs benchmark del nivel detectado
+  • Golpes afectados por problema
+  • Accionabilidad (¿hay drill directo?)
+Ejemplo urgencia mapping:
+  • critica: root_cause + afecta 2+ golpes + score < 40
+  • alta: score 40-60 + afecta múltiples OR score < 50 + afecta 1 golpe crítico
+  • media: score 60-80 + aspecto específico
+  • baja: score > 75 OR refinamiento menor
+
+═══ JSON EXACTO (sin texto adicional) ═══
 {{
   "global_score": {global_score},
   "session_type": "{session_type}",
   "nivel_general": "principiante|intermedio|avanzado|experto",
-  "diagnostico_global": "máximo 3 oraciones",
-  "root_cause": "",
+  "diagnostico_global": "Síntesis en 2-3 oraciones del nivel actual y hallazgo clave",
+  "root_cause": "Problema fundamental único, o: No se detectó causa raíz común",
   "analisis_por_golpe": {{
-    "forehand": {{"score": {fh_score},    "patrones_detectados": [], "riesgo_lesion": ""}},
-    "backhand": {{"score": {bh_score},    "patrones_detectados": [], "riesgo_lesion": ""}},
-    "saque":    {{"score": {saque_score}, "patrones_detectados": [], "riesgo_lesion": ""}}
+    "forehand": {{"score": {fh_score}, "patrones_detectados": ["lista de 1-2 patrones clave"], "riesgo_lesion": "ninguno|bajo|moderado|alto con descripción"}},
+    "backhand": {{"score": {bh_score}, "patrones_detectados": [""], "riesgo_lesion": ""}},
+    "saque": {{"score": {saque_score}, "patrones_detectados": [""], "riesgo_lesion": ""}}
   }},
-  "patrones_globales": [],
+  "patrones_globales": ["lista de 2-3 patrones que cruzan golpes"],
   "top_3_insights": [
     {{
-      "area": "",
+      "area": "Nombre del área (footwork, rotación, timing, etc)",
       "impacto": "alto|medio|bajo",
-      "descripcion": "",
-      "golpes_afectados": []
-    }}
+      "descripcion": "Explicación de qué está pasando y por qué importa en el juego",
+      "golpes_afectados": ["forehand", "backhand"],
+      "accionabilidad": "Drill o ejercicio concreto para abordar esto"
+    }},
+    {{"area": "", "impacto": "", "descripcion": "", "golpes_afectados": [], "accionabilidad": ""}},
+    {{"area": "", "impacto": "", "descripcion": "", "golpes_afectados": [], "accionabilidad": ""}}
   ],
   "fatigue_analysis": {{
     "status": "sin_degradacion|degradacion_leve|degradacion_moderada|degradacion_severa|sin_datos",
     "minuto_inicio": null,
-    "observacion": ""
+    "observacion": "Descripción de cómo se observa fatiga (si aplica)"
   }},
   "evolucion": {{
     "tiene_historial": {"true" if previous_session else "false"},
-    "progreso_global": "",
-    "dimensiones_mejoradas": [],
-    "dimensiones_regresadas": [],
+    "progreso_global": "Descripción de tendencia general vs sesión anterior",
+    "dimensiones_mejoradas": ["lista de dimensiones que mejoraron > 2pts"],
+    "dimensiones_regresadas": ["lista de dimensiones que regresaron > 5pts"],
     "tendencia": "primera_sesion|mejorando|estable|regresando"
   }},
   "prioridades_mejora": [
     {{
       "prioridad": 1,
-      "golpe": "",
-      "dimension": "",
-      "score_actual": 0,
-      "score_objetivo": 0,
-      "impacto_estimado": "",
+      "golpe": "forehand|backhand|saque|general",
+      "dimension": "preparación|punto_impacto|follow_through|footwork|timing",
+      "score_actual": {fh_score},
+      "score_objetivo": {int(fh_score) + 10},
+      "impacto_estimado": "¿Cuánto mejoraría el global si se corrige? Ej: +3-5pts",
       "urgencia": "critica|alta|media|baja"
-    }}
+    }},
+    {{"prioridad": 2, "golpe": "", "dimension": "", "score_actual": 0, "score_objetivo": 0, "impacto_estimado": "", "urgencia": ""}},
+    {{"prioridad": 3, "golpe": "", "dimension": "", "score_actual": 0, "score_objetivo": 0, "impacto_estimado": "", "urgencia": ""}}
   ],
   "scores_detalle": {json_scores}
 }}"""
@@ -458,20 +482,18 @@ JSON exacto (sin texto adicional):
         "calculados en el JSON estructurado. Ese análisis es la verdad absoluta de esta sesión."
     )
 
-    prompt2 = f"""Ensambla el reporte narrativo final de esta sesión de tenis.
-
-VERDAD ABSOLUTA — no contradecir bajo ninguna circunstancia:
-  Score global: {structured.get('global_score', global_score)}/100
-  Nivel: {structured.get('nivel_general', '')}
-  Root cause: {root_cause if root_cause else 'No detectado'}
-  Diagnóstico: {structured.get('diagnostico_global', '')}
+    prompt2 = f"""═══ VERDAD ABSOLUTA (NO contradecir bajo ninguna circunstancia) ═══
+Score global: {structured.get('global_score', global_score)}/100 | Nivel: {structured.get('nivel_general', '')}
+Root cause: {root_cause if root_cause else 'No detectado'}
+Diagnóstico core: {structured.get('diagnostico_global', '')}
 {insights_block}
 {f"DELTA HEADLINE: {delta_headline}" if delta_headline else ""}
 
+═══ CONTEXTO TÉCNICO ═══
 NOTA SOBRE ÁNGULOS: {angle_note}
 {warning_note}
 
-SECCIONES PRE-ESCRITAS DE ESPECIALISTAS (usar casi literalmente, solo suavizar transiciones):
+ANÁLISIS DE ESPECIALISTAS (copiar prosa casi literalmente, solo suavizar transiciones):
 === FOREHAND ===
 {seccion_fh if seccion_fh else "[No aplica para esta sesión]"}
 
@@ -481,32 +503,47 @@ SECCIONES PRE-ESCRITAS DE ESPECIALISTAS (usar casi literalmente, solo suavizar t
 === SAQUE ===
 {seccion_sq if seccion_sq else "[No aplica para esta sesión]"}
 
-DATOS DE SESIÓN:
+DATOS CONTEXTUALES:
 {context}
 
-ESTRUCTURA QUE DEBES ESCRIBIR (solo estas 4 secciones — los golpes ya están arriba):
+═══ ESTRUCTURA NARRATIVA (4 SECCIONES OBLIGATORIAS) ═══
 
 1. DIAGNÓSTICO GENERAL (2-3 párrafos)
-   Si existe root_cause, ábrelo con él como hilo conductor.
-   Describe nivel actual, patrones globales y cadena cinética.
-   Integra los patrones cruzados de los insights.
+   • APERTURA: Si existe root_cause, ábrelo aquí como hilo conductor principal
+   • CONTENIDO: Nivel actual (score {structured.get('global_score', global_score)}/100 = {structured.get('nivel_general', '')}),
+     patrones globales, estado de cadena cinética
+   • INTEGRACIÓN: Conecta los patrones cruzados (insights) con la explicación del nivel
+   • CIERRE: Sintesis del estado general en 1-2 oraciones
+   TONO: Profesional, analítico, basado en datos
 
 2. PATRONES CRÍTICOS Y RIESGO DE LESIÓN (1-2 párrafos)
-   Errores que se repiten en múltiples golpes.
-   Riesgos biomecánicos reales a medio plazo.
+   • ERRORES REPETIDOS: Qué error se ve en múltiples golpes (ej: rodillas estiradas en FH y BH)
+   • MANIFESTACIÓN: Cómo afecta cada golpe específicamente
+   • RIESGOS BIOMECÁNICOS: A medio/largo plazo (tendinitis, desequilibrio muscular, etc)
+   • Si no hay riesgo = aclarar explícitamente
+   TONO: Preventivo, educativo, claro sobre riesgos reales
 
 3. COMPARACIÓN CON REFERENCIA (1 párrafo)
-   Dónde está el jugador vs el nivel técnico esperado para este score global.
+   • DÓNDE ESTÁ: Posiciona al jugador dentro de su rango de nivel actual
+   • BENCHMARK: Qué esperar de un jugador {structured.get('nivel_general', '')} promedio
+   • BRECHA: Qué dimensiones lo acercan vs lo alejan del siguiente nivel
+   • VENTANAS DE MEJORA: Cuáles son realistas a corto plazo (2-3 sesiones)
+   TONO: Realista, motivador, comparativo
 
 4. RECOMENDACIONES PRIORITARIAS (1-2 párrafos)
-   Los 2-3 cambios con mayor impacto real.
-   OBLIGATORIO — cada recomendación debe seguir esta estructura exacta:
-     Hecho (dato observado) → Impacto (consecuencia en el juego) → Acción (ejercicio o drill concreto).
-   Ejemplo correcto: "Tu preparación de derecha promedia X grados de apertura (Hecho).
-   Esto reduce la aceleración disponible en pelotas rápidas (Impacto).
-   En la próxima sesión, practica el ejercicio de sombra con marcador de posición de raqueta (Acción)."
+   • SELECCIÓN: Los 2-3 cambios con mayor impacto en el juego
+   • ESTRUCTURA OBLIGATORIA PARA CADA RECOMENDACIÓN:
+     [HECHO] Dato biomecánico observado (ej: "preparación de derecha promedia X°")
+     [IMPACTO] Consecuencia en el juego (ej: "reduce aceleración en pelotas rápidas")
+     [ACCIÓN] Drill concreto y ejecutable (ej: "practica sombra con marcador de raqueta, 10min 3x semana")
+   • PRIORIZACIÓN: Primero las acciones de máximo impacto
+   • CLARIDAD: Cada acción debe ser específica (no "mejorar footwork" sino "ejercicio X, duración Y, frecuencia Z")
+   TONO: Accionable, específico, motivador
 
-Formato: texto continuo sin headers, cada sección separada por doble salto de línea."""
+═══ FORMATO FINAL ═══
+Texto continuo sin headers ni numeración.
+Cada sección separada por doble salto de línea.
+Longitud total: 500-800 palabras."""
 
     msg2 = client.chat.completions.create(
         model=get_model_for_agent("synthesizer"), max_tokens=6000,
