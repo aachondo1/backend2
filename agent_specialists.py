@@ -530,78 +530,121 @@ def run_agent_backhand(
     bh_phase_data    = phase_angles_all.get("backhand", {})
     bh_phase_block   = _format_phase_block(bh_phase_data, bh_range_label)
 
-    # ── Prompt JSON ───────────────────────────────────────────
+    # ── Prompt optimizado para Gemini 2.0 Flash con análisis profundo ──
     bh_stroke_variant_upper = bh_stroke_variant.upper()
-    prompt = f"""Eres experto biomecánico en backhand de tenis. Analiza estos datos reales y responde SOLO con JSON válido, sin markdown.
+    prompt = f"""Eres experto biomecánico en backhand de tenis. Analiza PROFUNDAMENTE estos datos reales.
+Responde SOLO con JSON válido, sin markdown, sin backticks.
 
+═══ CONTEXTO DE SESIÓN ═══
 {session_ctx}
 
 {camera_ctx}
 
 {equipment_ctx}
 
-DATOS BIOMECÁNICOS GLOBALES:
-- Codo {guide_side} prom (brazo GUÍA del backhand): {sum_guide_elbow}° (óptimo {bh_range_label}: {bh_elbow_opt})
-- Rodilla {knee_side} prom: {sum_knee}° (óptimo: 130-150°)
-- Cadera {guide_side} prom: {sum_guide_hip}° (óptimo: 140-160°)
-- Alineación hombros: {summary.get('avg_shoulder_alignment', 0)}° (óptimo: < 5°)
-- Velocidad pelota máx: {max_ball_speed} px/frame | prom: {avg_ball_speed} px/frame
+═══ DATOS BIOMECÁNICOS COMPLETOS ═══
 
+PROMEDIOS GLOBALES (sesión completa):
+  Codo {guide_side} promedio (brazo GUÍA): {sum_guide_elbow}° | Rango óptimo ({bh_range_label}): {bh_elbow_opt}
+  Rodilla {knee_side} promedio: {sum_knee}° | Rango óptimo: 130-150°
+  Cadera {guide_side} promedio: {sum_guide_hip}° | Rango óptimo: 140-160°
+  Alineación hombros promedio: {summary.get('avg_shoulder_alignment', 0)}° | Óptimo: < 5°
+  Velocidad pelota máx: {max_ball_speed} px/frame | Promedio: {avg_ball_speed} px/frame
+
+PUNTO DE IMPACTO (instantánea crítica):
 {impact_note}
-- Codo {guide_side} en impacto (brazo guía): {imp_guide_elbow}° (óptimo {bh_range_label}: {bh_elbow_opt})
-- Rodilla {knee_side} en impacto: {imp_knee}° (óptimo: 130-150°)
-- Cadera {guide_side} en impacto: {imp_guide_hip}° (óptimo: 140-160°)
-- Alineación hombros en impacto: {imp_shoulder}°
+  Codo {guide_side} (brazo guía): {imp_guide_elbow}° vs óptimo {bh_range_label} {bh_elbow_opt} (delta: {abs(imp_guide_elbow - bh_range[0]) if imp_guide_elbow < bh_range[0] else abs(imp_guide_elbow - bh_range[1]) if imp_guide_elbow > bh_range[1] else 0}°)
+  Rodilla {knee_side}: {imp_knee}° vs óptimo 130-150° (delta: {abs(imp_knee - 140) if imp_knee not in range(130, 151) else 0}°)
+  Cadera {guide_side}: {imp_guide_hip}° vs óptimo 140-160° (delta: {abs(imp_guide_hip - 150) if imp_guide_hip not in range(140, 161) else 0}°)
+  Alineación hombros: {imp_shoulder}° vs óptimo < 5° (delta: {abs(imp_shoulder)}°)
+
+CONSISTENCIA (Desviación Estándar - indicador de repetibilidad):
+  Std Codo {guide_side} (brazo guía): {std_elbow}° ({std_elbow > 20 and "⚠️ MUY INCONSISTENTE" or std_elbow > 10 and "⚠️ Moderado" or "✓ Consistente"})
+  Std Rodilla {knee_side}: {std_knee}°
+  Std Cadera {guide_side}: {std_hip}°
+  Std Alineación hombros: {std_shoulder}° ({std_shoulder > 8 and "⚠️ Rotación irregular" or "✓ Alineación consistente"})
+  Std Velocidad pelota: {std_ball}° (variación de potencia)
+  Número de impactos analizados: {n_impacts}
 
 {consistency_block}
 
-FATIGA: {fatigue_note}
-  → Si hay fatiga detectada, penalizar posicion_pies y ritmo_cadencia en los últimos golpes.
+═══ ANÁLISIS DE VARIANTE TÉCNICA ═══
+TIPO DETECTADO: {bh_stroke_variant_upper}
+{bh_variant_note}
+
+  • TOPSPIN: trayectoria ascendente, hombros CERRADOS (< 10°), aceleración vertical
+  • SLICE/APPROACH: trayectoria DESCENDENTE, hombros MÁS ABIERTOS, velocidad menor es NORMAL
+  • Rango óptimo codo guía para {bh_range_label}: {bh_elbow_opt}
+
+TIPO DE GRIP DETECTADO: {grip_note}
+  • TWO-HANDED: evaluar tracción bilateral, extensión codo guía adelante
+  • ONE-HANDED: evaluar rotación completa hombro dominante, extensión brazo único
+
+═══ CONTEXTO BIOMECÁNICO ADICIONAL ═══
+FATIGA DETECTADA: {fatigue_note}
+  → Aplicar penalización en últimas repeticiones si hay degradación
 
 POSICIÓN EN CANCHA: {position_note}
-  → Ajusta las expectativas de flexión de rodilla y tiempo de preparación según la posición.
+  → Ajustar expectativas según posición (cerca/atrás/lado)
+  → En SLICE APPROACH: pie delantero adelantado es CORRECTO
 
-TIPO DE BACKHAND DETECTADO: {grip_note}
-  → Adapta TODO el análisis biomecánico al tipo de grip detectado.
-  → Si es TWO_HANDED: evaluar tracción bilateral, extensión del codo guía hacia adelante.
-  → Si es ONE_HANDED: evaluar rotación completa del hombro dominante, extensión del brazo único.
 {bh_phase_block}
 
-VARIANTE TÉCNICA: {bh_stroke_variant_upper}
-{bh_variant_note}
-  → TOPSPIN: trayectoria ascendente, hombros cerrados (<10°).
-  → SLICE / APPROACH: trayectoria DESCENDENTE, hombros más abiertos.
-     Velocidad de pelota menor es NORMAL y no debe penalizarse.
-     Priorizar: contacto adelante del cuerpo, extensión del brazo, control de la cara de raqueta.
-  → Rango óptimo de codo guía para {bh_range_label}: {bh_elbow_opt}
-  → Usa SIEMPRE los criterios de la variante detectada, nunca compares slice con topspin.
+═══ FRAMEWORK DE SCORING ═══
 
-SCORING (máx 100 total):
-- Preparacion (0-20): rotación de hombros inversa + posición temprana — evaluar con FASE PREPARACIÓN si disponible
-- Punto_impacto (0-20): ángulos codo {guide_side} — evaluar contra rango {bh_range_label}: {bh_elbow_opt}; cadera con rango de FASE IMPACTO
-- Follow_through (0-20): extensión post-impacto según variante — evaluar con FASE FOLLOW-THROUGH si disponible
-- Posicion_pies (0-20): estabilidad y giro (en approach slice: pie delantero adelantado es CORRECTO)
-- Ritmo_cadencia (0-10): fluidez — el delta de cadena cinética es indicador directo
-- Potencia_pelota (0-10): velocidad relativa a la variante (slice tiene menor velocidad por naturaleza)
+DIMENSIONES (máx 100 total):
+  1. Preparacion (0-20): rotación INVERSA de hombros + posición temprana
+     - Evaluar: hombros separados, codo guía posicionado, altura correcta
+     - Usar ÁNGULOS DE FASE PREPARACIÓN si disponibles
 
-INSTRUCCIÓN CRÍTICA SOBRE FASES:
-Si ANÁLISIS DE FASES dice "NO DISPONIBLE" → ignorarlo completamente. Evaluar cada dimensión
-usando SOLO los ángulos de impacto de arriba, exactamente como lo harías sin datos de fases.
-NO penalices más por tener fases no disponibles. NO uses rangos por fase. NO inferir preparación.
+  2. Punto_impacto (0-20): ángulos en contacto con pelota
+     - Evaluar: codo {guide_side} contra rango {bh_range_label} ({bh_elbow_opt}), flexión rodilla, rotación cadera
+     - CRÍTICO: ajustar por VARIANTE detectada (slice vs topspin tienen métricas diferentes)
+     - Delta vs óptimo: 0° = 20pts, +/- 5° = 15pts, +/- 15° = 5pts, > 20° = 0pts
 
-Si ANÁLISIS POR FASE tiene secciones con datos:
-  - Un delta_hip_rotation alto confirma que la cadera lideró — no penalizar cadera en impacto si delta es positivo.
-  - Un delta_shoulder_rotation bajo indica golpe "armado" → penalizar preparacion y ritmo.
+  3. Follow_through (0-20): extensión y deceleración post-impacto
+     - Evaluar: brazo completado extensión, hombro terminó rotación, rotación cadera finalizada
+     - Usar ÁNGULOS DE FASE FOLLOW-THROUGH si disponibles
+     - VARIANTE SLICE: follow short es CORRECTO, no es error
 
-INSTRUCCIÓN SOBRE CONSISTENCIA: Usa los std_dev para ajustar el score de cada dimensión.
-Un std_elbow > 20° en el brazo guía indica preparación inconsistente → penalizar preparacion y punto_impacto.
-Un std_shoulder > 8° indica rotación de tronco irregular → penalizar follow_through y potencia_pelota.
-Menciona la consistencia explícitamente en las justificaciones de scoring.
+  4. Posicion_pies (0-20): estabilidad base y giro
+     - Indicador: movimiento de pies, balance final, apertura de cadera
+     - SLICE APPROACH: pie delantero adelantado NO es error
 
-ASIGNACIÓN NIVEL: 0-40 principiante | 41-60 intermedio | 61-80 avanzado | 81-100 experto
+  5. Ritmo_cadencia (0-10): fluidez de cadena cinética
+     - Indicador: transición suave cadera→hombro→codo, sin pausas
+     - Usar std_dev para validar: std > 20° = fragmentado (< 5pts)
+
+  6. Potencia_pelota (0-10): velocidad resultante relativa a variante
+     - Indicador: ball_speed máx y variación
+     - SLICE: velocidad menor es NORMAL — NO penalizar
+     - TOPSPIN: mayor velocidad esperada
+     - {ball_validated and "✓ Ball validated" or "⚠️ NO validado - score = 0"}
+
+═══ INSTRUCCIONES CRÍTICAS ═══
+
+VALIDACIÓN DE FASES:
+  • Si "NO DISPONIBLE": ignorar completamente, usar solo ángulos de impacto
+  • Si disponibles: evaluar CADA articulación contra su RANGO DE FASE
+  • delta_hip_rotation ALTO confirma que cadera lideró → no penalizar cadera en impacto
+  • delta_shoulder_rotation BAJO indica golpe "armado" → penalizar preparacion y ritmo
+
+VARIANTE-SPECIFIC SCORING:
+  • SLICE: priorizar contacto adelante del cuerpo, extensión del brazo, control
+  • TOPSPIN: evaluar rotación completa, velocidad de pelota mayor
+
+CONSISTENCIA EN SCORING:
+  • std_elbow (brazo guía) > 20°: preparación inconsistente → penalizar preparacion(-5pts) y punto_impacto(-5pts)
+  • std_shoulder > 8°: rotación irregular → penalizar follow_through(-5pts) y potencia_pelota(-2pts)
+  • Mencionar explícitamente en justificaciones
+
+NIVEL (basado en total_score):
+  0-40: principiante | 41-60: intermedio | 61-80: avanzado | 81-100: experto
+
 {fallback_warning}{ball_validation_note}
-JSON exacto (sin backticks):
-{{"stroke":"backhand","scores":{{"preparacion":{{"score":0,"max":20,"justificacion":""}},"punto_impacto":{{"score":0,"max":20,"justificacion":""}},"follow_through":{{"score":0,"max":20,"justificacion":""}},"posicion_pies":{{"score":0,"max":20,"justificacion":""}},"ritmo_cadencia":{{"score":0,"max":10,"justificacion":""}},"potencia_pelota":{{"score":0,"max":10,"justificacion":""}}}},"total_score":0,"nivel":"principiante|intermedio|avanzado|experto","analisis_tecnico":{{"fortalezas":[],"debilidades":[],"patron_error_principal":"","comparacion_optimo":""}},"metricas_clave":{{"angulo_codo_{guide_abbrev}_impacto":{imp_guide_elbow},"angulo_codo_{guide_abbrev}_promedio":{sum_guide_elbow},"std_codo_{guide_abbrev}":{std_elbow},"flexion_rodilla_{knee_side}_impacto":{imp_knee},"std_rodilla":{std_knee},"alineacion_hombros":{imp_shoulder},"std_hombros":{std_shoulder},"velocidad_pelota_max":{max_ball_speed},"std_velocidad_pelota":{std_ball}}},"observaciones_detalladas":"","datos_insuficientes":{str(bh_fallback).lower()}}}"""
+
+JSON EXACTO (sin backticks, valores numéricos reales):
+{{"stroke":"backhand","scores":{{"preparacion":{{"score":0,"max":20,"justificacion":"Rotación inversa y posición inicial"}},"punto_impacto":{{"score":0,"max":20,"justificacion":"Incluir delta vs óptimo {bh_range_label}, ajuste por variante"}},"follow_through":{{"score":0,"max":20,"justificacion":"Extensión post-impacto, contexto de variante"}},"posicion_pies":{{"score":0,"max":20,"justificacion":"Estabilidad y giro, contexto de slice approach"}},"ritmo_cadencia":{{"score":0,"max":10,"justificacion":"Fluidez de cadena cinética, mencionar std"}},"potencia_pelota":{{"score":0,"max":10,"justificacion":"Velocidad y consistencia, contexto de variante"}}}},"total_score":0,"nivel":"principiante|intermedio|avanzado|experto","analisis_tecnico":{{"fortalezas":["",""],"debilidades":["",""],"patron_error_principal":"","comparacion_optimo":""}},"metricas_clave":{{"angulo_codo_{guide_abbrev}_impacto":{imp_guide_elbow},"angulo_codo_{guide_abbrev}_promedio":{sum_guide_elbow},"std_codo_{guide_abbrev}":{std_elbow},"flexion_rodilla_{knee_side}_impacto":{imp_knee},"std_rodilla_{knee_side}":{std_knee},"alineacion_hombros":{imp_shoulder},"std_hombros":{std_shoulder},"velocidad_pelota_max":{max_ball_speed},"std_velocidad_pelota":{std_ball},"impactos_analizados":{n_impacts},"variante":"{bh_stroke_variant_upper}"}},"observaciones_detalladas":"","datos_insuficientes":{str(bh_fallback).lower()}}}"""
 
     msg_json = client.chat.completions.create(
         model=get_model_for_agent("specialist"),
@@ -781,52 +824,101 @@ def run_agent_saque(
         n_impacts=n_impacts,
     )
 
-    # ── Prompt JSON ───────────────────────────────────────────
-    prompt = f"""Eres experto biomecánico en saque de tenis. Analiza estos datos reales y responde SOLO con JSON válido, sin markdown.
+    # ── Prompt optimizado para Gemini 2.0 Flash con análisis profundo ──
+    prompt = f"""Eres experto biomecánico en saque de tenis. Analiza PROFUNDAMENTE estos datos reales.
+Responde SOLO con JSON válido, sin markdown, sin backticks.
 
+═══ CONTEXTO DE SESIÓN ═══
 {session_ctx}
 
 {camera_ctx}
 
 {equipment_ctx}
 
-DATOS BIOMECÁNICOS GLOBALES:
-- Codo {dom_side} prom (brazo de golpe): {sum_elbow}° (óptimo en extensión máxima: 150-170°)
-- Rodilla {dom_side} prom: {sum_knee}° (óptimo en carga trophy: 120-140°)
-- Cadera {dom_side} prom: {sum_hip}° (óptimo: 140-160°)
-- Alineación hombros: {summary.get('avg_shoulder_alignment', 0)}° (óptimo: < 5°)
-- Velocidad pelota máx: {max_ball_speed} px/frame | prom: {avg_ball_speed} px/frame
+═══ DATOS BIOMECÁNICOS COMPLETOS ═══
 
+PROMEDIOS GLOBALES (sesión completa):
+  Codo {dom_side} promedio: {sum_elbow}° | Rango óptimo (extensión máxima): 150-170°
+  Rodilla {dom_side} promedio: {sum_knee}° | Rango óptimo (carga trophy): 120-140°
+  Cadera {dom_side} promedio: {sum_hip}° | Rango óptimo: 140-160°
+  Alineación hombros promedio: {summary.get('avg_shoulder_alignment', 0)}° | Óptimo: < 5°
+  Velocidad pelota máx: {max_ball_speed} px/frame | Promedio: {avg_ball_speed} px/frame
+
+PUNTO DE IMPACTO (extensión máxima):
 {impact_note}
-- Codo {dom_side} en impacto (extensión máxima): {imp_elbow}° (óptimo: 150-170°)
-- Rodilla {dom_side} en carga trophy: {imp_knee}° (óptimo: 120-140°)
-- Cadera {dom_side} en impacto: {imp_hip}° (óptimo: 140-160°)
-- Alineación hombros en impacto: {imp_shoulder}°
+  Codo {dom_side} en impacto: {imp_elbow}° vs óptimo 150-170° (delta: {abs(imp_elbow - 160) if imp_elbow not in range(150, 171) else 0}°)
+  Rodilla {dom_side} en trophy: {imp_knee}° vs óptimo 120-140° (delta: {abs(imp_knee - 130) if imp_knee not in range(120, 141) else 0}°)
+  Cadera {dom_side}: {imp_hip}° vs óptimo 140-160° (delta: {abs(imp_hip - 150) if imp_hip not in range(140, 161) else 0}°)
+  Alineación hombros: {imp_shoulder}° vs óptimo < 5° (delta: {abs(imp_shoulder)}°)
+
+CONSISTENCIA (Desviación Estándar - indicador de repetibilidad):
+  Std Codo {dom_side}: {std_elbow}° ({std_elbow > 15 and "⚠️ EXTENSIÓN IRREGULAR" or std_elbow > 8 and "⚠️ Moderado" or "✓ Consistente"})
+  Std Rodilla {dom_side}: {std_knee}° ({std_knee > 15 and "⚠️ TROPHY INCONSISTENTE" or std_knee > 8 and "⚠️ Moderado" or "✓ Consistente"})
+  Std Cadera {dom_side}: {std_hip}°
+  Std Alineación hombros: {std_shoulder}° ({std_shoulder > 8 and "⚠️ Rotación irregular" or "✓ Alineación consistente"})
+  Std Velocidad pelota: {std_ball}° (variación de potencia)
+  Número de impactos analizados: {n_impacts}
 
 {consistency_block}
 
-FATIGA: {fatigue_note}
-  → Si hay fatiga detectada, penalizar carga_trophy y ritmo_cadencia.
+═══ CONTEXTO BIOMECÁNICO ADICIONAL ═══
+FATIGA DETECTADA: {fatigue_note}
+  → Aplicar penalización en últimas repeticiones si hay degradación
 
 POSICIÓN EN CANCHA: {position_note}
 
-SCORING (máx 100 total):
-- Preparacion_toss (0-20): lanzamiento, posición inicial
-- Carga_trophy (0-20): "trophy position", rodillas flexionadas
-- Punto_impacto (0-20): extensión máxima en contacto
-- Follow_through (0-20): continuidad del movimiento
-- Ritmo_cadencia (0-10): fluidez del servicio
-- Potencia_pelota (0-10): velocidad resultante
+═══ FRAMEWORK DE SCORING ═══
 
-INSTRUCCIÓN SOBRE CONSISTENCIA:
-Un std_elbow > 15° en el saque indica extensión irregular → penalizar punto_impacto.
-Un std_knee > 15° indica trophy inconsistente → penalizar carga_trophy.
-Un std_shoulder > 8° indica rotación de tronco irregular → penalizar ritmo_cadencia.
+DIMENSIONES (máx 100 total):
+  1. Preparacion_toss (0-20): lanzamiento de pelota y posición inicial
+     - Evaluar: altura de toss, consistencia de ubicación, sincronización
+     - Usar datos de posición de codo en fase preparación si disponibles
 
-ASIGNACIÓN NIVEL: 0-40 principiante | 41-60 intermedio | 61-80 avanzado | 81-100 experto
+  2. Carga_trophy (0-20): "trophy position" con rodillas flexionadas
+     - Evaluar: profundidad de rodillas (rango: 120-140°), posición de codo
+     - CRÍTICO: rodillas más flexionadas = mejor acumulación de energía
+     - Std_knee > 15° = muy inconsistente (< 5pts)
+
+  3. Punto_impacto (0-20): extensión máxima en contacto con pelota
+     - Evaluar: codo {dom_side} contra rango 150-170°, altura de lanzamiento, altura de brazo
+     - CRÍTICO: extensión máxima es característica del saque
+     - Delta vs óptimo: 0° = 20pts, +/- 5° = 15pts, +/- 15° = 5pts, > 20° = 0pts
+     - Std_elbow > 15° = muy inconsistente (restar 5-10pts)
+
+  4. Follow_through (0-20): continuidad del movimiento post-impacto
+     - Evaluar: descarga del brazo, rotación de cadera completada
+     - Evaluar: uso de pesos corporales, traslación hacia adelante
+
+  5. Ritmo_cadencia (0-10): fluidez del servicio completo
+     - Indicador: transición suave entre toss, carga, extensión, follow
+     - Std_shoulder > 8° = rotación irregular (< 5pts)
+     - Sincronización trophy-codo-pelota
+
+  6. Potencia_pelota (0-10): velocidad resultante del servicio
+     - Indicador: ball_speed máx y variación
+     - Contexto de nivel: principiante < 5px/f, intermedio 5-8, avanzado > 8
+     - {sq_ball_validated and "✓ Ball validated" or "⚠️ NO validado - score = 0"}
+
+═══ INSTRUCCIONES CRÍTICAS ═══
+
+SAQUE-SPECIFIC METRICS:
+  • Extensión de codo: 150-170° es el rango correcto (no 90-120° como groundstrokes)
+  • Trophy depth: rodillas 120-140° indica carga correcta
+  • No penalizar por angles si std es alto en saque — es golpe más variable
+
+CONSISTENCIA EN SCORING:
+  • std_elbow > 15°: extensión muy variable → penalizar punto_impacto(-5 a -10pts)
+  • std_knee > 15°: trophy inconsistente → penalizar carga_trophy(-5pts) y ritmo_cadencia(-3pts)
+  • std_shoulder > 8°: rotación irregular → penalizar ritmo_cadencia(-3 a -5pts)
+  • Mencionar explícitamente en justificaciones
+
+NIVEL (basado en total_score):
+  0-40: principiante | 41-60: intermedio | 61-80: avanzado | 81-100: experto
+
 {fallback_warning}{ball_validation_note}
-JSON exacto (sin backticks):
-{{"stroke":"saque","scores":{{"preparacion_toss":{{"score":0,"max":20,"justificacion":""}},"carga_trophy":{{"score":0,"max":20,"justificacion":""}},"punto_impacto":{{"score":0,"max":20,"justificacion":""}},"follow_through":{{"score":0,"max":20,"justificacion":""}},"ritmo_cadencia":{{"score":0,"max":10,"justificacion":""}},"potencia_pelota":{{"score":0,"max":10,"justificacion":""}}}},"total_score":0,"nivel":"principiante|intermedio|avanzado|experto","analisis_tecnico":{{"fortalezas":[],"debilidades":[],"patron_error_principal":"","comparacion_optimo":""}},"metricas_clave":{{"extension_codo_{dom_abbrev}_impacto":{imp_elbow},"extension_codo_{dom_abbrev}_promedio":{sum_elbow},"std_codo_{dom_abbrev}":{std_elbow},"flexion_rodilla_{dom_abbrev}_carga":{imp_knee},"std_rodilla_{dom_abbrev}":{std_knee},"alineacion_hombros":{imp_shoulder},"std_hombros":{std_shoulder},"velocidad_pelota_max":{max_ball_speed},"std_velocidad_pelota":{std_ball}}},"observaciones_detalladas":"","datos_insuficientes":{str(sq_fallback).lower()}}}"""
+
+JSON EXACTO (sin backticks, valores numéricos reales):
+{{"stroke":"saque","scores":{{"preparacion_toss":{{"score":0,"max":20,"justificacion":"Lanzamiento y sincronización inicial"}},"carga_trophy":{{"score":0,"max":20,"justificacion":"Profundidad de rodillas, flexión, energía acumulada"}},"punto_impacto":{{"score":0,"max":20,"justificacion":"Incluir delta vs óptimo 150-170°, mencionar std_elbow"}},"follow_through":{{"score":0,"max":20,"justificacion":"Descarga y continuidad post-impacto"}},"ritmo_cadencia":{{"score":0,"max":10,"justificacion":"Fluidez y sincronización del servicio completo, mencionar std_shoulder"}},"potencia_pelota":{{"score":0,"max":10,"justificacion":"Velocidad y contexto de nivel"}}}},"total_score":0,"nivel":"principiante|intermedio|avanzado|experto","analisis_tecnico":{{"fortalezas":["",""],"debilidades":["",""],"patron_error_principal":"","comparacion_optimo":""}},"metricas_clave":{{"extension_codo_{dom_abbrev}_impacto":{imp_elbow},"extension_codo_{dom_abbrev}_promedio":{sum_elbow},"std_codo_{dom_abbrev}":{std_elbow},"flexion_rodilla_{dom_abbrev}_carga":{imp_knee},"std_rodilla_{dom_abbrev}":{std_knee},"alineacion_hombros":{imp_shoulder},"std_hombros":{std_shoulder},"velocidad_pelota_max":{max_ball_speed},"std_velocidad_pelota":{std_ball},"impactos_analizados":{n_impacts}}},"observaciones_detalladas":"","datos_insuficientes":{str(sq_fallback).lower()}}}"""
 
     msg_json = client.chat.completions.create(
         model=get_model_for_agent("specialist"),
