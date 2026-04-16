@@ -716,9 +716,10 @@ def generate_bone_mapping_input(
             "session_meta": {
                 "stroke_type":     stroke,
                 "dominant_hand":   dominant_hand,
-                "total_impacts":   len(impacts),
-                "quality_score":   _quality_score(impacts),
-                "has_landmarks":   any(f.get("landmarks_3d") for f in refined_impacts),
+                "total_impacts":     len(impacts),
+                "impacts_with_pose": sum(1 for f in refined_impacts if f.get("landmarks_3d")),
+                "quality_score":     _quality_score(impacts),
+                "has_landmarks":     any(f.get("landmarks_3d") for f in refined_impacts),
                 "segment_lengths": segment_lengths,
                 "phase_refined":   any(f.get("_phases") for f in refined_impacts),
                 "grip_type":       grip_type,       # ← nuevo: para el Digital Twin

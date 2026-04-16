@@ -598,10 +598,13 @@ def _detect_impacts_from_clip(
         vx_curr = xs[i + 1] - xs[i]
         vy_curr = ys[i + 1] - ys[i]
         dot = vx_prev * vx_curr + vy_prev * vy_curr
-        if dot < 0:
+
+        # Solo considera cambio de dirección si la pelota tiene velocidad suficiente (no ruido)
+        speed_prev = (vx_prev**2 + vy_prev**2)**0.5
+        if dot < 0 and speed_prev > 15:  # Agregó filtro de velocidad mínima
             impact_ts.append(timestamps[i])
 
-    # Fallback: si no hay cambios de dirección, usar los 3 frames de mayor velocidad
+    # Fallback: si no hay cambios de dirección clara, usar los 3 frames de mayor velocidad
     if not impact_ts:
         speeds   = [f["ball"]["speed_pixels"] for f in detected]
         sorted_d = sorted(detected, key=lambda f: f["ball"]["speed_pixels"], reverse=True)
@@ -614,6 +617,17 @@ def _detect_impacts_from_clip(
         ball_speed = next(f["ball"]["speed_pixels"] for f in detected if f["timestamp"] == ts)
 
         if diff_ms <= 200 and ball_speed >= 20:
+            # Filtro de codo: descartar si codo está muy cerrado (preparación, no impacto)
+            elbow_key = "left_elbow" if dominant_hand == "left" else "right_elbow"
+            elbow_angle = closest.get("angles", {}).get(elbow_key, 0)
+
+            # Ángulos válidos para impacto (no preparación):
+            # - Forehand/Backhand impacto: codo 100-170° (extendido)
+            # - Saque impacto: codo 140-180° (completamente extendido)
+            if elbow_angle < 95:
+                print(f"  ⛔ ts={ts:.2f}s descartado — fase preparación (codo={elbow_angle:.0f}° < 95°)")
+                continue
+
             # Filtro oponente: pelota en mitad superior = golpe del oponente
             ball_frame = next((f for f in detected if f["timestamp"] == ts), None)
             if ball_frame:
